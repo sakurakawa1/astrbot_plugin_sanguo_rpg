@@ -110,24 +110,32 @@ class SanGuoRPGPlugin(Star):
         """闯关冒险"""
         user_id = event.get_sender_id()
         
-        # 检查是否是后续操作
-        last_adventure = self.adventure_context.get(user_id)
-        if last_adventure and "requires_follow_up" in last_adventure:
-            try:
-                option_index = int(event.get_plain_text()) - 1
-                result = self.general_service.adventure(user_id, option_index=option_index)
-                if user_id in self.adventure_context:
-                    del self.adventure_context[user_id]
-            except (ValueError, IndexError):
-                yield event.plain_result("无效的选项，请输入数字。")
-                return
-        else:
-            result = self.general_service.adventure(user_id)
+        try:
+            # 检查是否是后续操作
+            last_adventure = self.adventure_context.get(user_id)
+            if last_adventure and "requires_follow_up" in last_adventure:
+                try:
+                    option_index = int(event.get_plain_text()) - 1
+                    result = self.general_service.adventure(user_id, option_index=option_index)
+                    # 成功处理后，删除上下文
+                    if user_id in self.adventure_context:
+                        del self.adventure_context[user_id]
+                except (ValueError, IndexError):
+                    yield event.plain_result("无效的选项，请输入数字。")
+                    return
+            else:
+                # 首次闯关
+                result = self.general_service.adventure(user_id)
 
-        if result.get("requires_follow_up"):
-            self.adventure_context[user_id] = result
+            # 如果需要后续操作，则保存上下文
+            if result.get("requires_follow_up"):
+                self.adventure_context[user_id] = result
+            
+            yield event.plain_result(result["message"])
 
-        yield event.plain_result(result["message"])
+        except Exception as e:
+            logger.error(f"闯关时发生意外错误: {e}")
+            yield event.plain_result("闯关时发生意外错误，请联系管理员。")
 
     @filter.command("挂机闯关")
     async def auto_adventure(self, event: AstrMessageEvent):
