@@ -31,6 +31,35 @@ class SqliteGeneralRepository:
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
+        # 创建表（如果不存在）
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS generals (
+            general_id INTEGER PRIMARY KEY,
+            name TEXT NOT NULL,
+            rarity INTEGER NOT NULL,
+            camp TEXT NOT NULL,
+            wu_li INTEGER NOT NULL,
+            zhi_li INTEGER NOT NULL,
+            tong_shuai INTEGER NOT NULL,
+            su_du INTEGER NOT NULL,
+            skill_desc TEXT NOT NULL,
+            background TEXT NOT NULL
+        )
+        """)
+        
+        # 创建user_generals表
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS user_generals (
+            instance_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id TEXT NOT NULL,
+            general_id INTEGER NOT NULL,
+            level INTEGER NOT NULL,
+            exp INTEGER NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (general_id) REFERENCES generals (general_id)
+        )
+        """)
+        
         # 检查是否已有数据
         cursor.execute("SELECT COUNT(*) FROM generals")
         count = cursor.fetchone()[0]

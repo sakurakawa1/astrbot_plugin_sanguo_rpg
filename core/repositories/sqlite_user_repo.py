@@ -47,8 +47,8 @@ class SqliteUserRepository:
         with self._create_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
-                "UPDATE users SET nickname = ?, coins = ?, yuanbao = ?, last_signed_in = ? WHERE user_id = ?",
-                (user.nickname, user.coins, user.yuanbao, user.last_signed_in, user.user_id)
+                "UPDATE users SET nickname = ?, coins = ?, yuanbao = ?, exp = ?, last_signed_in = ? WHERE user_id = ?",
+                (user.nickname, user.coins, user.yuanbao, user.exp, user.last_signed_in, user.user_id)
             )
             conn.commit()
     
