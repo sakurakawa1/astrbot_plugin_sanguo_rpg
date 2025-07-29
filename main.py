@@ -9,6 +9,7 @@ import os
 from astrbot.api import logger, AstrBotConfig
 from astrbot.api.event import filter, AstrMessageEvent, MessageEventResult
 from astrbot.api.star import Context, Star, register
+from astrbot.core.star.filter.permission import PermissionType
 from astrbot_plugin_sanguo_rpg.core.database.migration import run_migrations
 from astrbot_plugin_sanguo_rpg.core.repositories.sqlite_user_repo import SqliteUserRepository
 from astrbot_plugin_sanguo_rpg.core.repositories.sqlite_general_repo import SqliteGeneralRepository
@@ -154,3 +155,22 @@ class SanGuoRPGPlugin(Star):
         user_id = event.get_sender_id()
         result = self.general_service.auto_adventure(user_id)
         yield event.plain_result(result["message"] + "\n（本次为挂机闯关，已为您随机选择）")
+
+    @filter.permission_type(PermissionType.ADMIN)
+    @filter.command("三国管理")
+    async def sanguo_admin(self, event: AstrMessageEvent, *args, **kwargs):
+        """三国RPG插件管理命令"""
+        plain_text = event.get_plain_text().strip()
+        
+        if plain_text == "migrate":
+            try:
+                db_path = "data/sanguo_rpg.db"
+                plugin_root_dir = os.path.dirname(__file__)
+                migrations_path = os.path.join(plugin_root_dir, "core", "database", "migrations")
+                run_migrations(db_path, migrations_path)
+                yield event.plain_result("✅ 数据库迁移成功完成。")
+            except Exception as e:
+                logger.error(f"手动执行数据库迁移时出错: {e}")
+                yield event.plain_result(f"❌ 数据库迁移失败: {e}")
+        else:
+            yield event.plain_result("无效的管理命令。可用命令: migrate")
