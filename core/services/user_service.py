@@ -39,7 +39,7 @@ class UserService:
         
         now = datetime.datetime.now()
         if user.last_signed_in and user.last_signed_in.date() == now.date():
-            return {"success": False, "message": "您今日已经签到过了。"}
+            return {"success": False, "message": "你今天已经签到过了，明天再来吧！"}
             
         # 签到奖励
         coins_reward = 200

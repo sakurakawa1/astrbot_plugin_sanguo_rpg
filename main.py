@@ -110,6 +110,12 @@ class SanGuoRPGPlugin(Star):
     async def adventure(self, event: AstrMessageEvent, *args, **kwargs):
         """闯关冒险"""
         user_id = event.get_sender_id()
+
+        # 检查用户是否注册
+        if not self.user_repo.get_by_id(user_id):
+            yield event.plain_result("您尚未注册，请先使用 /注册 命令。")
+            return
+
         plain_text = event.get_plain_text().strip()
         
         try:
