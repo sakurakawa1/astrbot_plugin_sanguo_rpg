@@ -163,16 +163,20 @@ class SqliteGeneralRepository:
         
         return count
     
-    def get_random_general_by_rarity_pool(self) -> General:
+    def get_random_general_by_rarity_pool(self) -> Optional[General]:
         """根据稀有度概率池随机获取武将"""
+        all_generals = self.get_all_generals()
+        if not all_generals:
+            return None
+
         # 稀有度概率：5星(1%), 4星(9%), 3星(20%), 2星(70%)
         rarity_pool = [2] * 70 + [3] * 20 + [4] * 9 + [5] * 1
-        selected_rarity = random.choice(rarity_pool)
         
-        generals = self.get_generals_by_rarity(selected_rarity)
-        if generals:
-            return random.choice(generals)
-        
-        # 如果没有该稀有度的武将，返回所有武将中的随机一个
-        all_generals = self.get_all_generals()
-        return random.choice(all_generals) if all_generals else None
+        while True:
+            selected_rarity = random.choice(rarity_pool)
+            generals_in_rarity = [g for g in all_generals if g.rarity == selected_rarity]
+            
+            if generals_in_rarity:
+                return random.choice(generals_in_rarity)
+            # 如果当前抽到的稀有度在数据库中不存在对应武将，则重新抽取。
+            # 这样可以避免在样本数据不全时（如缺少3星武将）程序出错。
