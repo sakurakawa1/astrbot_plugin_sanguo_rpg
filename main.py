@@ -51,6 +51,9 @@ class SanGuoRPGPlugin(Star):
         self.user_service = UserService(self.user_repo, self.game_config)
         self.general_service = GeneralService(self.general_repo, self.user_repo, self.game_config)
 
+        # 用于存储闯关上下文的字典
+        self.adventure_context = {}
+
 
     async def initialize(self):
         """插件异步初始化"""
@@ -108,12 +111,13 @@ class SanGuoRPGPlugin(Star):
         user_id = event.get_sender_id()
         
         # 检查是否是后续操作
-        last_adventure = self.context.get_data("last_adventure", user_id=user_id)
+        last_adventure = self.adventure_context.get(user_id)
         if last_adventure and "requires_follow_up" in last_adventure:
             try:
                 option_index = int(event.get_plain_text()) - 1
                 result = self.general_service.adventure(user_id, option_index=option_index)
-                self.context.clear_data("last_adventure", user_id=user_id)
+                if user_id in self.adventure_context:
+                    del self.adventure_context[user_id]
             except (ValueError, IndexError):
                 yield event.plain_result("无效的选项，请输入数字。")
                 return
@@ -121,7 +125,7 @@ class SanGuoRPGPlugin(Star):
             result = self.general_service.adventure(user_id)
 
         if result.get("requires_follow_up"):
-            self.context.set_data("last_adventure", result, user_id=user_id)
+            self.adventure_context[user_id] = result
 
         yield event.plain_result(result["message"])
 

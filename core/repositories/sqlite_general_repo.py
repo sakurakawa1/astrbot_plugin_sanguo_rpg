@@ -60,6 +60,12 @@ class SqliteGeneralRepository:
         )
         """)
         
+        # 检查并添加 background 列以实现向后兼容
+        cursor.execute("PRAGMA table_info(generals)")
+        columns = [column[1] for column in cursor.fetchall()]
+        if 'background' not in columns:
+            cursor.execute("ALTER TABLE generals ADD COLUMN background TEXT NOT NULL DEFAULT ''")
+
         # 检查是否已有数据
         cursor.execute("SELECT COUNT(*) FROM generals")
         count = cursor.fetchone()[0]
