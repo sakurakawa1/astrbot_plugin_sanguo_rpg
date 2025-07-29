@@ -21,8 +21,8 @@ class SqliteUserRepository:
         with self._create_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
-                "INSERT INTO users (user_id, nickname, coins, yuanbao, created_at, last_signed_in) VALUES (?, ?, ?, ?, ?, ?)",
-                (user.user_id, user.nickname, user.coins, user.yuanbao, user.created_at, user.last_signed_in)
+                "INSERT INTO users (user_id, nickname, coins, yuanbao, exp, created_at, last_signed_in) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (user.user_id, user.nickname, user.coins, user.yuanbao, user.exp, user.created_at, user.last_signed_in)
             )
             conn.commit()
 
@@ -38,6 +38,7 @@ class SqliteUserRepository:
                     nickname=row["nickname"],
                     coins=row["coins"],
                     yuanbao=row["yuanbao"],
+                    exp=row["exp"],
                     created_at=datetime.fromisoformat(row["created_at"]),
                     last_signed_in=datetime.fromisoformat(row["last_signed_in"]) if row["last_signed_in"] else None
                 )

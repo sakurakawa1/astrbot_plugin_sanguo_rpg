@@ -36,14 +36,15 @@ def run_migrations(db_path: str, migrations_path: str):
         migration_name = migration_file.split('.')[0]
         if migration_name not in applied_migrations:
             try:
+                # 动态导入迁移模块
+                module_name = f"astrbot_plugin_sanguo_rpg.core.database.migrations.{migration_name}"
+                migration_module = __import__(module_name, fromlist=['upgrade'])
+                
                 with conn:
                     cursor = conn.cursor()
                     
-                    # 从迁移文件中读取SQL
-                    with open(os.path.join(migrations_path, migration_file), 'r', encoding='utf-8') as f:
-                        sql_script = f.read()
-                    
-                    cursor.executescript(sql_script)
+                    # 执行 upgrade 函数
+                    migration_module.upgrade(cursor)
                     
                     # 记录迁移版本
                     cursor.execute("INSERT INTO schema_migrations (version) VALUES (?)", (migration_name,))

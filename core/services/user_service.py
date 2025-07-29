@@ -24,6 +24,7 @@ class UserService:
             nickname=nickname,
             coins=self.game_config.get("user", {}).get("initial_coins", 1000),
             yuanbao=self.game_config.get("user", {}).get("initial_yuanbao", 100),
+            exp=0,
             created_at=datetime.datetime.now(),
             last_signed_in=None
         )
@@ -41,12 +42,14 @@ class UserService:
             return {"success": False, "message": "您今日已经签到过了。"}
             
         # 签到奖励
-        coins_reward = 200  # 示例奖励
+        coins_reward = 200
+        exp_reward = 10
         user.coins += coins_reward
+        user.exp += exp_reward
         user.last_signed_in = now
         self.user_repo.update(user)
         
-        return {"success": True, "message": f"签到成功！获得 {coins_reward} 铜钱。"}
+        return {"success": True, "message": f"签到成功！获得 {coins_reward} 铜钱，{exp_reward} 经验。"}
 
     def get_user_info(self, user_id: str) -> dict:
         """获取用户详细信息"""
@@ -57,6 +60,7 @@ class UserService:
         info = (
             f"【主公信息】\n"
             f"👤 昵称: {user.nickname}\n"
+            f"经验: {user.exp}\n"
             f"💰 铜钱: {user.coins}\n"
             f"💎 元宝: {user.yuanbao}\n"
             f"📅 注册时间: {user.created_at.strftime('%Y-%m-%d %H:%M:%S')}"

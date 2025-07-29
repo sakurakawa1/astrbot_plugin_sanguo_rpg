@@ -64,13 +64,13 @@ class SanGuoRPGPlugin(Star):
         """)
 
     @filter.command("三国帮助", alias={"三国菜单"})
-    async def sanguo_help(self, event: AstrMessageEvent):
+    async def sanguo_help(self, event: AstrMessageEvent, *args, **kwargs):
         """显示三国RPG插件帮助信息"""
         image_path = draw_help_image()
         yield event.image_result(image_path)
 
     @filter.command("注册")
-    async def register_user(self, event: AstrMessageEvent):
+    async def register_user(self, event: AstrMessageEvent, *args, **kwargs):
         """注册用户"""
         user_id = event.get_sender_id()
         nickname = event.get_sender_name() if event.get_sender_name() is not None else event.get_sender_id()
@@ -78,48 +78,58 @@ class SanGuoRPGPlugin(Star):
         yield event.plain_result(result["message"])
 
     @filter.command("签到")
-    async def sign_in(self, event: AstrMessageEvent):
+    async def sign_in(self, event: AstrMessageEvent, *args, **kwargs):
         """每日签到"""
         user_id = event.get_sender_id()
         result = self.user_service.daily_sign_in(user_id)
         yield event.plain_result(result["message"])
 
     @filter.command("我的信息")
-    async def my_info(self, event: AstrMessageEvent):
+    async def my_info(self, event: AstrMessageEvent, *args, **kwargs):
         """查看我的信息"""
         user_id = event.get_sender_id()
         result = self.user_service.get_user_info(user_id)
         yield event.plain_result(result["message"])
 
     @filter.command("我的武将", alias={"武将列表", "查看武将"})
-    async def my_generals(self, event: AstrMessageEvent):
+    async def my_generals(self, event: AstrMessageEvent, *args, **kwargs):
         """查看我的武将"""
         user_id = event.get_sender_id()
         result = self.general_service.get_user_generals_info(user_id)
         yield event.plain_result(result["message"])
 
     @filter.command("招募", alias={"招募武将", "抽卡"})
-    async def recruit_general(self, event: AstrMessageEvent):
+    async def recruit_general(self, event: AstrMessageEvent, *args, **kwargs):
         """招募武将"""
         user_id = event.get_sender_id()
         result = self.general_service.recruit_general(user_id)
         yield event.plain_result(result["message"])
 
     @filter.command("闯关", alias={"冒险", "战斗", "挑战"})
-    async def adventure(self, event: AstrMessageEvent):
+    async def adventure(self, event: AstrMessageEvent, *args, **kwargs):
         """闯关冒险"""
         user_id = event.get_sender_id()
+        plain_text = event.get_plain_text().strip()
         
         try:
-            # 检查是否是后续操作
             last_adventure = self.adventure_context.get(user_id)
+
+            # 如果有待处理的闯关上下文
             if last_adventure and "requires_follow_up" in last_adventure:
+                # 如果用户没有提供选项，则重新发送提示
+                if not plain_text:
+                    yield event.plain_result(last_adventure["message"] + "\n\n请使用 `/闯关 [选项数字]` 回复。")
+                    return
+
+                # 如果用户提供了选项
                 try:
-                    option_index = int(event.get_plain_text()) - 1
+                    option_index = int(plain_text) - 1
                     result = self.general_service.adventure(user_id, option_index=option_index)
-                    # 成功处理后，删除上下文
+                    
+                    # 清理旧的上下文
                     if user_id in self.adventure_context:
                         del self.adventure_context[user_id]
+
                 except (ValueError, IndexError):
                     yield event.plain_result("无效的选项，请输入数字。")
                     return
@@ -127,9 +137,10 @@ class SanGuoRPGPlugin(Star):
                 # 首次闯关
                 result = self.general_service.adventure(user_id)
 
-            # 如果需要后续操作，则保存上下文
+            # 如果结果需要后续操作，保存上下文并修改提示
             if result.get("requires_follow_up"):
                 self.adventure_context[user_id] = result
+                result["message"] += "\n\n请使用 `/闯关 [选项数字]` 回复。"
             
             yield event.plain_result(result["message"])
 
@@ -138,7 +149,7 @@ class SanGuoRPGPlugin(Star):
             yield event.plain_result("闯关时发生意外错误，请联系管理员。")
 
     @filter.command("挂机闯关")
-    async def auto_adventure(self, event: AstrMessageEvent):
+    async def auto_adventure(self, event: AstrMessageEvent, *args, **kwargs):
         """自动闯关"""
         user_id = event.get_sender_id()
         result = self.general_service.auto_adventure(user_id)

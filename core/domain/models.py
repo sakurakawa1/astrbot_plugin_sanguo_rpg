@@ -10,11 +10,12 @@ from typing import Optional
 
 class User:
     """玩家信息"""
-    def __init__(self, user_id: str, nickname: str, coins: int, yuanbao: int, created_at: datetime.datetime, last_signed_in: Optional[datetime.datetime] = None):
+    def __init__(self, user_id: str, nickname: str, coins: int, yuanbao: int, exp: int, created_at: datetime.datetime, last_signed_in: Optional[datetime.datetime] = None):
         self.user_id = user_id
         self.nickname = nickname
         self.coins = coins
         self.yuanbao = yuanbao
+        self.exp = exp
         self.created_at = created_at
         self.last_signed_in = last_signed_in
 
