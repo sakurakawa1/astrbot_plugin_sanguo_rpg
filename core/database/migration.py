@@ -7,6 +7,8 @@
 
 import sqlite3
 import os
+import importlib.util
+import sys
 from astrbot.api import logger
 
 def _get_applied_migrations(conn):
@@ -36,16 +38,23 @@ def run_migrations(db_path: str, migrations_path: str):
         migration_name = migration_file.split('.')[0]
         if migration_name not in applied_migrations:
             try:
-                # 动态导入迁移模块
-                module_name = f"astrbot_plugin_sanguo_rpg.core.database.migrations.{migration_name}"
-                migration_module = __import__(module_name, fromlist=['upgrade'])
-                
+                # 使用 importlib 动态导入迁移模块，以支持数字开头的模块名
+                spec = importlib.util.spec_from_file_location(
+                    migration_name, os.path.join(migrations_path, migration_file)
+                )
+                migration_module = importlib.util.module_from_spec(spec)
+                sys.modules[migration_name] = migration_module
+                spec.loader.exec_module(migration_module)
+
                 with conn:
                     cursor = conn.cursor()
                     
                     # 执行 upgrade 函数
-                    migration_module.upgrade(cursor)
-                    
+                    if hasattr(migration_module, 'upgrade'):
+                        migration_module.upgrade(cursor)
+                    else:
+                        logger.warning(f"迁移 {migration_name} 中未找到 upgrade 函数。")
+
                     # 记录迁移版本
                     cursor.execute("INSERT INTO schema_migrations (version) VALUES (?)", (migration_name,))
                     
