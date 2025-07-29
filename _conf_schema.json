@@ -1,0 +1,32 @@
+{
+    "initial_coins": {
+        "type": "int",
+        "default": 1000,
+        "description": "新玩家初始铜钱数量"
+    },
+    "initial_yuanbao": {
+        "type": "int",
+        "default": 100,
+        "description": "新玩家初始元宝数量"
+    },
+    "recruit_cost_yuanbao": {
+        "type": "int",
+        "default": 50,
+        "description": "招募武将消耗的元宝数量"
+    },
+    "recruit_cooldown_seconds": {
+        "type": "int",
+        "default": 300,
+        "description": "招募冷却时间（秒）"
+    },
+    "adventure_cost_coins": {
+        "type": "int",
+        "default": 50,
+        "description": "闯关消耗的铜钱数量"
+    },
+    "adventure_cooldown_seconds": {
+        "type": "int",
+        "default": 600,
+        "description": "闯关冷却时间（秒）"
+    }
+}
