@@ -99,14 +99,14 @@ class SanGuoRPGPlugin(Star):
         yield event.plain_result(result["message"])
 
     @filter.command("招募", alias={"招募武将", "抽卡"})
-    async def recruit_general(self, event: AstrMessageEvent, _=None):
+    async def recruit_general(self, event: AstrMessageEvent):
         """招募武将"""
         user_id = event.get_sender_id()
         result = self.general_service.recruit_general(user_id)
         yield event.plain_result(result["message"])
 
     @filter.command("闯关", alias={"冒险", "战斗", "挑战"})
-    async def adventure(self, event: AstrMessageEvent, _=None):
+    async def adventure(self, event: AstrMessageEvent):
         """闯关冒险"""
         user_id = event.get_sender_id()
         
