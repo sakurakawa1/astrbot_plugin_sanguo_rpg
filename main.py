@@ -18,23 +18,23 @@ from astrbot_plugin_sanguo_rpg.draw.help import draw_help_image
 
 @register("astrbot_plugin_sanguo_rpg", "Cline", "A simple Three Kingdoms RPG plugin", "0.1.0", "")
 class SanGuoRPGPlugin(Star):
-    def __init__(self, context: Context, config: AstrBotConfig):
+    def __init__(self, context: Context):
         super().__init__(context)
         logger.info("三国RPG插件加载中...")
 
         # --- 1. 加载配置 ---
         self.game_config = {
             "user": {
-                "initial_coins": config.get("initial_coins", 1000),
-                "initial_yuanbao": config.get("initial_yuanbao", 100)
+                "initial_coins": 1000,
+                "initial_yuanbao": 100
             },
             "recruit": {
-                "cost_yuanbao": config.get("recruit_cost_yuanbao", 50),
-                "cooldown_seconds": config.get("recruit_cooldown_seconds", 300)
+                "cost_yuanbao": 50,
+                "cooldown_seconds": 300
             },
             "adventure": {
-                "cost_coins": config.get("adventure_cost_coins", 50),
-                "cooldown_seconds": config.get("adventure_cooldown_seconds", 600)
+                "cost_coins": 50,
+                "cooldown_seconds": 600
             }
         }
 
