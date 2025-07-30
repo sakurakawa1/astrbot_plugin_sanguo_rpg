@@ -49,6 +49,10 @@ class SanGuoRPGPlugin(Star):
         # --- 3. 组合根：实例化所有仓储和服务 ---
         self.user_repo = SqliteUserRepository(db_path)
         self.general_repo = SqliteGeneralRepository(db_path)
+        
+        # 显式调用数据库初始化
+        self.general_repo.initialize_database()
+        
         self.user_service = UserService(self.user_repo, self.game_config)
         self.general_service = GeneralService(self.general_repo, self.user_repo, self.game_config)
 

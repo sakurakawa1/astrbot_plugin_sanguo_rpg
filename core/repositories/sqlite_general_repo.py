@@ -16,10 +16,9 @@ class SqliteGeneralRepository:
     
     def __init__(self, db_path: str):
         self.db_path = db_path
-        self._init_sample_generals()
     
-    def _init_sample_generals(self):
-        """初始化示例武将数据"""
+    def initialize_database(self):
+        """初始化数据库和示例武将数据"""
         sample_generals = [
     (16, '张让', 1, '群', 61, 64, 63, 61, '无', '侍奉灵帝的宦官十常侍之首，暗杀了何进，但被袁绍追杀时投河自杀。'),
     (17, '张角', 2, '群', 70, 69, 66, 69, '太平道：所有攻击有20%概率转化为妖术伤害。', '钜鹿郡的在野人士。为太平道的教祖，向民众广传教义。趁社会动乱，得到广大民众支持。结成黄巾党对抗汉王朝，发动黄巾之乱。\n中郎将皇甫嵩奉令讨伐张角时，张角不久即因病去世，他死后不久，十月，皇甫嵩和张梁在广宗大战，张梁大败战死，张角也被剖开棺木，戮尸枭首，将人头送到洛阳示众'),
