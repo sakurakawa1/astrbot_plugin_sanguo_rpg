@@ -84,5 +84,19 @@ class SanGuoRPGPlugin(Star):
     async def my_info(self, event: AstrMessageEvent):
         """查看我的信息"""
         user_id = event.get_sender_id()
-        result = self.user_service.get_user_info(user_id)
-        yield event.plain_result(result["message"])
+        
+        # --- 直接在此处实现 get_user_info 的逻辑 ---
+        user = self.user_repo.get_by_id(user_id)
+        if not user:
+            yield event.plain_result("您尚未注册，请先使用 /三国注册 命令。")
+            return
+
+        info = (
+            f"【主公信息】\n"
+            f"👤 昵称: {user.nickname}\n"
+            f"经验: {getattr(user, 'exp', 0)}\n"
+            f"💰 铜钱: {user.coins}\n"
+            f"💎 元宝: {user.yuanbao}\n"
+            f"📅 注册时间: {user.created_at.strftime('%Y-%m-%d %H:%M:%S')}"
+        )
+        yield event.plain_result(info)
