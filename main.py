@@ -3,7 +3,7 @@
 # @Author  : Cline
 # @File    : main.py
 # @Software: AstrBot
-# @Description: 三国文字RPG插件主文件 (二分法排错 - 测试draw模块)
+# @Description: 三国文字RPG插件主文件 (二分法排错 - 测试Repo和DataSetup)
 
 import os
 from astrbot.api import logger, AstrBotConfig
@@ -13,16 +13,16 @@ from astrbot.api.star import Context, Star
 # 恢复第二阶段需要的模块
 from astrbot_plugin_sanguo_rpg.core.database.migration import run_migrations
 from astrbot_plugin_sanguo_rpg.core.repositories.sqlite_user_repo import SqliteUserRepository
-# from astrbot_plugin_sanguo_rpg.core.repositories.sqlite_general_repo import SqliteGeneralRepository # 隔离
+from astrbot_plugin_sanguo_rpg.core.repositories.sqlite_general_repo import SqliteGeneralRepository # 恢复
 from astrbot_plugin_sanguo_rpg.core.services.user_service import UserService
 # from astrbot_plugin_sanguo_rpg.core.services.general_service import GeneralService # 隔离
-# from astrbot_plugin_sanguo_rpg.core.services.data_setup_service import DataSetupService # 隔离
+from astrbot_plugin_sanguo_rpg.core.services.data_setup_service import DataSetupService # 恢复
 from astrbot_plugin_sanguo_rpg.draw.help import draw_help_image
 
 class SanGuoRPGPlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
-        logger.info("三国RPG插件加载中... (二分法排错 - 测试draw模块)")
+        logger.info("三国RPG插件加载中... (二分法排错 - 测试Repo和DataSetup)")
 
         # --- 1. 加载配置 ---
         self.game_config = { "user": { "initial_coins": 1000, "initial_yuanbao": 100 } }
@@ -39,16 +39,17 @@ class SanGuoRPGPlugin(Star):
         self.user_repo = SqliteUserRepository(db_path)
         self.user_service = UserService(self.user_repo, self.game_config)
         
-        # self.general_repo = SqliteGeneralRepository(db_path) # 隔离
-        # data_setup_service = DataSetupService(self.general_repo, db_path) # 隔离
-        # data_setup_service.setup_initial_data() # 隔离
+        self.general_repo = SqliteGeneralRepository(db_path) # 恢复
+        data_setup_service = DataSetupService(self.general_repo, db_path) # 恢复
+        data_setup_service.setup_initial_data() # 恢复
+        
         # self.general_service = GeneralService(self.general_repo, self.user_repo, self.game_config) # 隔离
         # self.adventure_context = {} # 隔离
 
 
     async def initialize(self):
         """插件异步初始化"""
-        logger.info("三国文字RPG插件加载成功！(二分法排错 - 测试draw模块)")
+        logger.info("三国文字RPG插件加载成功！(二分法排错 - 测试Repo和DataSetup)")
 
     @filter.command("三国帮助", alias={"三国菜单"})
     async def sanguo_help(self, event: AstrMessageEvent):
@@ -74,12 +75,3 @@ class SanGuoRPGPlugin(Star):
         user_id = event.get_sender_id()
         result = self.user_service.daily_sign_in(user_id)
         yield event.plain_result(result["message"])
-
-    # --- 其他命令暂时禁用 ---
-    # @filter.command("三国我的信息")
-    # async def my_info(self, event: AstrMessageEvent):
-    #     ...
-
-    # @filter.command("三国我的武将", alias={"三国武将列表", "三国查看武将"})
-    # async def my_generals(self, event: AstrMessageEvent):
-    #     ...
