@@ -16,67 +16,30 @@ class SqliteGeneralRepository:
     
     def __init__(self, db_path: str):
         self.db_path = db_path
-    
-    def initialize_database(self):
-        """初始化数据库和示例武将数据"""
-        sample_generals = [
-    (16, '张让', 1, '群', 61, 64, 63, 61, '无', '侍奉灵帝的宦官十常侍之首，暗杀了何进，但被袁绍追杀时投河自杀。'),
-    (17, '张角', 2, '群', 70, 69, 66, 69, '太平道：所有攻击有20%概率转化为妖术伤害。', '钜鹿郡的在野人士。为太平道的教祖，向民众广传教义。趁社会动乱，得到广大民众支持。结成黄巾党对抗汉王朝，发动黄巾之乱。\n中郎将皇甫嵩奉令讨伐张角时，张角不久即因病去世，他死后不久，十月，皇甫嵩和张梁在广宗大战，张梁大败战死，张角也被剖开棺木，戮尸枭首，将人头送到洛阳示众'),
-    (18, '张宝', 4, '群', 88, 87, 89, 90, '地公将军：闯关时，失败惩罚降低50%。', '张角之弟。和张角一起举兵欲推翻汉王朝，而发动黄巾之乱。自称地公将军，用兄长传授的妖术指挥叛乱，后被属下严政刺杀。'),
-    (19, '张梁', 4, '群', 89, 91, 89, 90, '人公将军：闯关时，获得金币增加20%。', '张角、张宝之弟。和兄长们一起举兵欲推翻汉王朝，而发动黄巾之乱。自称人公将军，张角死后继续指挥叛乱，败给了官军，在曲阳之战战死。'),
-    (20, '张飞', 5, '蜀', 99, 100, 99, 96, '当阳桥：闯关时，有10%概率直接胜利。', '演义中为蜀汉五虎大将之一。与刘备、关羽结为异姓兄弟。在长坂坡之战中，单枪匹马在长坂桥上，喝退曹操万大军的追击。后因关羽死于东吴之手，急于为兄报仇，要在三天以内做成大量白色的铠甲。但迁怒部将范疆、张达，在睡觉时被范疆、张达所杀。'),
-]
-        
+
+    def add_sample_generals(self, generals_data: List[tuple]):
+        """添加示例武将数据"""
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
-        
-        # 创建表（如果不存在）
-        cursor.execute("""
-        CREATE TABLE IF NOT EXISTS generals (
-            general_id INTEGER PRIMARY KEY,
-            name TEXT NOT NULL,
-            rarity INTEGER NOT NULL,
-            camp TEXT NOT NULL,
-            wu_li INTEGER NOT NULL,
-            zhi_li INTEGER NOT NULL,
-            tong_shuai INTEGER NOT NULL,
-            su_du INTEGER NOT NULL,
-            skill_desc TEXT NOT NULL,
-            background TEXT NOT NULL
-        )
-        """)
-        
-        # 创建user_generals表
-        cursor.execute("""
-        CREATE TABLE IF NOT EXISTS user_generals (
-            instance_id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id TEXT NOT NULL,
-            general_id INTEGER NOT NULL,
-            level INTEGER NOT NULL,
-            exp INTEGER NOT NULL,
-            created_at TEXT NOT NULL,
-            FOREIGN KEY (general_id) REFERENCES generals (general_id)
-        )
-        """)
-        
-        # 检查并添加 background 列以实现向后兼容
-        cursor.execute("PRAGMA table_info(generals)")
-        columns = [column[1] for column in cursor.fetchall()]
-        if 'background' not in columns:
-            cursor.execute("ALTER TABLE generals ADD COLUMN background TEXT NOT NULL DEFAULT ''")
-
-        # 检查是否已有数据
-        cursor.execute("SELECT COUNT(*) FROM generals")
-        count = cursor.fetchone()[0]
-        
-        if count == 0:
+        try:
             cursor.executemany(
                 "INSERT INTO generals (general_id, name, rarity, camp, wu_li, zhi_li, tong_shuai, su_du, skill_desc, background) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                sample_generals
+                generals_data
             )
             conn.commit()
-        
-        conn.close()
+        finally:
+            conn.close()
+
+    def get_generals_count(self) -> int:
+        """获取武将总数"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        try:
+            cursor.execute("SELECT COUNT(*) FROM generals")
+            count = cursor.fetchone()[0]
+            return count
+        finally:
+            conn.close()
     
     def get_general_by_id(self, general_id: int) -> Optional[General]:
         """根据ID获取武将模板"""

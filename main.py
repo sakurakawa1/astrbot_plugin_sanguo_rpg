@@ -3,7 +3,7 @@
 # @Author  : Cline
 # @File    : main.py
 # @Software: AstrBot
-# @Description: 三国文字RPG插件主文件 (增量恢复 - 步骤2)
+# @Description: 三国文字RPG插件主文件 (增量恢复 - 步骤2 修复版)
 
 import os
 from astrbot.api import logger, AstrBotConfig
@@ -16,12 +16,13 @@ from astrbot_plugin_sanguo_rpg.core.repositories.sqlite_user_repo import SqliteU
 from astrbot_plugin_sanguo_rpg.core.repositories.sqlite_general_repo import SqliteGeneralRepository
 from astrbot_plugin_sanguo_rpg.core.services.user_service import UserService
 from astrbot_plugin_sanguo_rpg.core.services.general_service import GeneralService
+from astrbot_plugin_sanguo_rpg.core.services.data_setup_service import DataSetupService
 from astrbot_plugin_sanguo_rpg.draw.help import draw_help_image
 
 class SanGuoRPGPlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
-        logger.info("三国RPG插件加载中... (增量恢复 - 步骤2)")
+        logger.info("三国RPG插件加载中... (增量恢复 - 步骤2 修复版)")
 
         # --- 1. 加载配置 ---
         self.game_config = {
@@ -39,19 +40,22 @@ class SanGuoRPGPlugin(Star):
             }
         }
 
-        # --- 2. 数据库初始化 ---
+        # --- 2. 数据库和基础数据初始化 ---
         db_path = "data/sanguo_rpg.db"
         os.makedirs(os.path.dirname(db_path), exist_ok=True)
+        
+        # 运行数据库迁移
         plugin_root_dir = os.path.dirname(__file__)
         migrations_path = os.path.join(plugin_root_dir, "core", "database", "migrations")
         run_migrations(db_path, migrations_path)
 
-        # --- 3. 组合根：实例化所有仓储和服务 ---
+        # --- 3. 组合根：实例化仓储和服务 ---
         self.user_repo = SqliteUserRepository(db_path)
         self.general_repo = SqliteGeneralRepository(db_path)
         
-        # 显式调用数据库初始化
-        self.general_repo.initialize_database()
+        # 初始化核心游戏数据
+        data_setup_service = DataSetupService(self.general_repo, db_path)
+        data_setup_service.setup_initial_data()
         
         self.user_service = UserService(self.user_repo, self.game_config)
         self.general_service = GeneralService(self.general_repo, self.user_repo, self.game_config)
@@ -62,7 +66,7 @@ class SanGuoRPGPlugin(Star):
 
     async def initialize(self):
         """插件异步初始化"""
-        logger.info("三国文字RPG插件加载成功！(增量恢复 - 步骤2)")
+        logger.info("三国文字RPG插件加载成功！(增量恢复 - 步骤2 修复版)")
 
     @filter.command("三国帮助", alias={"三国菜单"})
     async def sanguo_help(self, event: AstrMessageEvent):
