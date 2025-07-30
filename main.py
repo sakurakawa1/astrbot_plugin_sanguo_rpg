@@ -65,13 +65,13 @@ class SanGuoRPGPlugin(Star):
         """)
 
     @filter.command("三国帮助", alias={"三国菜单"})
-    async def sanguo_help(self, event: AstrMessageEvent, *args, **kwargs):
+    async def sanguo_help(self, event: AstrMessageEvent):
         """显示三国RPG插件帮助信息"""
         image_path = draw_help_image()
         yield event.image_result(image_path)
 
     @filter.command("注册")
-    async def register_user(self, event: AstrMessageEvent, *args, **kwargs):
+    async def register_user(self, event: AstrMessageEvent):
         """注册用户"""
         user_id = event.get_sender_id()
         nickname = event.get_sender_name() if event.get_sender_name() is not None else event.get_sender_id()
@@ -79,35 +79,35 @@ class SanGuoRPGPlugin(Star):
         yield event.plain_result(result["message"])
 
     @filter.command("签到")
-    async def sign_in(self, event: AstrMessageEvent, *args, **kwargs):
+    async def sign_in(self, event: AstrMessageEvent):
         """每日签到"""
         user_id = event.get_sender_id()
         result = self.user_service.daily_sign_in(user_id)
         yield event.plain_result(result["message"])
 
     @filter.command("我的信息")
-    async def my_info(self, event: AstrMessageEvent, *args, **kwargs):
+    async def my_info(self, event: AstrMessageEvent):
         """查看我的信息"""
         user_id = event.get_sender_id()
         result = self.user_service.get_user_info(user_id)
         yield event.plain_result(result["message"])
 
     @filter.command("我的武将", alias={"武将列表", "查看武将"})
-    async def my_generals(self, event: AstrMessageEvent, *args, **kwargs):
+    async def my_generals(self, event: AstrMessageEvent):
         """查看我的武将"""
         user_id = event.get_sender_id()
         result = self.general_service.get_user_generals_info(user_id)
         yield event.plain_result(result["message"])
 
     @filter.command("招募", alias={"招募武将", "抽卡"})
-    async def recruit_general(self, event: AstrMessageEvent, *args, **kwargs):
+    async def recruit_general(self, event: AstrMessageEvent):
         """招募武将"""
         user_id = event.get_sender_id()
         result = self.general_service.recruit_general(user_id)
         yield event.plain_result(result["message"])
 
     @filter.command("闯关", alias={"冒险", "战斗", "挑战"})
-    async def adventure(self, event: AstrMessageEvent, *args, **kwargs):
+    async def adventure(self, event: AstrMessageEvent):
         """闯关冒险"""
         user_id = event.get_sender_id()
 
@@ -156,7 +156,7 @@ class SanGuoRPGPlugin(Star):
             yield event.plain_result("闯关时发生意外错误，请联系管理员。")
 
     @filter.command("挂机闯关")
-    async def auto_adventure(self, event: AstrMessageEvent, *args, **kwargs):
+    async def auto_adventure(self, event: AstrMessageEvent):
         """自动闯关"""
         user_id = event.get_sender_id()
         result = self.general_service.auto_adventure(user_id)
@@ -164,7 +164,7 @@ class SanGuoRPGPlugin(Star):
 
     @filter.permission_type(PermissionType.ADMIN)
     @filter.command("三国管理")
-    async def sanguo_admin(self, event: AstrMessageEvent, *args, **kwargs):
+    async def sanguo_admin(self, event: AstrMessageEvent):
         """三国RPG插件管理命令"""
         plain_text = event.get_plain_text().strip()
         
