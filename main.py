@@ -8,7 +8,7 @@
 import os
 from astrbot.api import logger, AstrBotConfig
 from astrbot.api.event import filter, AstrMessageEvent, MessageEventResult
-from astrbot.api.star import Context, Star, register
+from astrbot.api.star import Context, Star
 from astrbot.core.star.filter.permission import PermissionType
 from astrbot_plugin_sanguo_rpg.core.database.migration import run_migrations
 from astrbot_plugin_sanguo_rpg.core.repositories.sqlite_user_repo import SqliteUserRepository
@@ -17,9 +17,8 @@ from astrbot_plugin_sanguo_rpg.core.services.user_service import UserService
 from astrbot_plugin_sanguo_rpg.core.services.general_service import GeneralService
 from astrbot_plugin_sanguo_rpg.draw.help import draw_help_image
 
-@register("astrbot_plugin_sanguo_rpg", "Cline", "A simple Three Kingdoms RPG plugin", "0.1.0", "")
 class SanGuoRPGPlugin(Star):
-    def __init__(self, context: Context):
+    def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
         logger.info("三国RPG插件加载中...")
 
