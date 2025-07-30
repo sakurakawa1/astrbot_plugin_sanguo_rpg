@@ -33,25 +33,55 @@ class SqliteUserRepository:
             cursor.execute("SELECT * FROM users WHERE user_id = ?", (user_id,))
             row = cursor.fetchone()
             if row:
-                return User(
-                    user_id=row["user_id"],
-                    nickname=row["nickname"],
-                    coins=row["coins"],
-                    yuanbao=row["yuanbao"],
-                    exp=row["exp"],
-                    created_at=datetime.fromisoformat(row["created_at"]),
-                    last_signed_in=datetime.fromisoformat(row["last_signed_in"]) if row["last_signed_in"] else None
-                )
+                try:
+                    row_keys = row.keys()
+
+                    # 核心字段检查
+                    if "user_id" not in row_keys or "nickname" not in row_keys:
+                        return None
+
+                    last_signed_in_str = row["last_signed_in"] if "last_signed_in" in row_keys and row["last_signed_in"] else None
+                    last_signed_in = None
+                    if last_signed_in_str:
+                        try:
+                            last_signed_in = datetime.fromisoformat(last_signed_in_str)
+                        except (ValueError, TypeError):
+                            pass  # Keep as None
+
+                    created_at_str = row["created_at"] if "created_at" in row_keys and row["created_at"] else None
+                    created_at = datetime.now()  # Default
+                    if created_at_str:
+                        try:
+                            created_at = datetime.fromisoformat(created_at_str)
+                        except (ValueError, TypeError):
+                            pass  # Keep default
+
+                    return User(
+                        user_id=row["user_id"],
+                        nickname=row["nickname"],
+                        coins=row["coins"] if "coins" in row_keys else 0,
+                        yuanbao=row["yuanbao"] if "yuanbao" in row_keys else 0,
+                        exp=row["exp"] if "exp" in row_keys else 0,
+                        created_at=created_at,
+                        last_signed_in=last_signed_in
+                    )
+                except KeyError:
+                    return None
             return None
 
     def update(self, user: User):
         with self._create_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute(
-                "UPDATE users SET nickname = ?, coins = ?, yuanbao = ?, exp = ?, last_signed_in = ? WHERE user_id = ?",
-                (user.nickname, user.coins, user.yuanbao, user.exp, user.last_signed_in, user.user_id)
-            )
-            conn.commit()
+            try:
+                cursor.execute(
+                    "UPDATE users SET nickname = ?, coins = ?, yuanbao = ?, exp = ?, last_signed_in = ? WHERE user_id = ?",
+                    (user.nickname, user.coins, user.yuanbao, getattr(user, 'exp', 0), user.last_signed_in, user.user_id)
+                )
+                conn.commit()
+            except sqlite3.Error as e:
+                # 可以添加日志记录
+                print(f"Database update failed: {e}")
+                raise
     
     def get_user(self, user_id: str) -> Optional[User]:
         """获取用户信息（别名方法）"""
