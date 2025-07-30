@@ -27,7 +27,7 @@ class SanGuoRPGPlugin(Star):
             fake_db["users"][user_id] = {"nickname": nickname}
             yield event.plain_result(f"重构版注册成功！欢迎 {nickname}！")
 
-    @filter.command("签到")
+    @filter.command("三国签到")
     async def sign_in(self, event: AstrMessageEvent):
         user_id = event.get_sender_id()
         if user_id in fake_db["users"]:
