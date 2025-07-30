@@ -3,7 +3,7 @@
 # @Author  : Cline
 # @File    : main.py
 # @Software: AstrBot
-# @Description: 三国文字RPG插件主文件 (二分法排错 - 测试GeneralService实例化)
+# @Description: 三国文字RPG插件主文件 (增量恢复 - 步骤4.1)
 
 import os
 from astrbot.api import logger, AstrBotConfig
@@ -14,17 +14,21 @@ from astrbot_plugin_sanguo_rpg.core.database.migration import run_migrations
 from astrbot_plugin_sanguo_rpg.core.repositories.sqlite_user_repo import SqliteUserRepository
 from astrbot_plugin_sanguo_rpg.core.repositories.sqlite_general_repo import SqliteGeneralRepository
 from astrbot_plugin_sanguo_rpg.core.services.user_service import UserService
-from astrbot_plugin_sanguo_rpg.core.services.general_service import GeneralService # 恢复
+from astrbot_plugin_sanguo_rpg.core.services.general_service import GeneralService
 from astrbot_plugin_sanguo_rpg.core.services.data_setup_service import DataSetupService
 from astrbot_plugin_sanguo_rpg.draw.help import draw_help_image
 
 class SanGuoRPGPlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
-        logger.info("三国RPG插件加载中... (二分法排错 - 测试GeneralService实例化)")
+        logger.info("三国RPG插件加载中... (增量恢复 - 步骤4.1)")
 
         # --- 1. 加载配置 ---
-        self.game_config = { "user": { "initial_coins": 1000, "initial_yuanbao": 100 } }
+        self.game_config = {
+            "user": { "initial_coins": 1000, "initial_yuanbao": 100 },
+            "recruit": { "cost_yuanbao": 50, "cooldown_seconds": 300 },
+            "adventure": { "cost_coins": 50, "cooldown_seconds": 600 }
+        }
 
         # --- 2. 数据库和基础数据初始化 ---
         db_path = "data/sanguo_rpg.db"
@@ -42,14 +46,14 @@ class SanGuoRPGPlugin(Star):
         data_setup_service.setup_initial_data()
         
         self.user_service = UserService(self.user_repo, self.game_config)
-        self.general_service = GeneralService(self.general_repo, self.user_repo, self.game_config) # 恢复
+        self.general_service = GeneralService(self.general_repo, self.user_repo, self.game_config)
         
-        # self.adventure_context = {} # 隔离
+        self.adventure_context = {}
 
 
     async def initialize(self):
         """插件异步初始化"""
-        logger.info("三国文字RPG插件加载成功！(二分法排错 - 测试GeneralService实例化)")
+        logger.info("三国文字RPG插件加载成功！(增量恢复 - 步骤4.1)")
 
     @filter.command("三国帮助", alias={"三国菜单"})
     async def sanguo_help(self, event: AstrMessageEvent):
@@ -74,4 +78,11 @@ class SanGuoRPGPlugin(Star):
         """每日签到"""
         user_id = event.get_sender_id()
         result = self.user_service.daily_sign_in(user_id)
+        yield event.plain_result(result["message"])
+        
+    @filter.command("三国我的信息")
+    async def my_info(self, event: AstrMessageEvent):
+        """查看我的信息"""
+        user_id = event.get_sender_id()
+        result = self.user_service.get_user_info(user_id)
         yield event.plain_result(result["message"])
