@@ -272,27 +272,34 @@ class SanGuoRPGPlugin(Star):
 
         # --- 核心冒险逻辑 ---
         template = random.choice(ADVENTURE_TEMPLATES)
+        option = random.choice(template["options"]) # 随机选择一个选项
         
-        # 奖励与惩罚
-        coins_change = random.randint(template["coins_reward_min"], template["coins_reward_max"])
-        exp_gain = random.randint(template["exp_reward_min"], template["exp_reward_max"])
+        # 总是假定成功并获取奖励
+        rewards = option.get("rewards", {})
+        coins_change = rewards.get("coins", 0)
+        exp_gain = rewards.get("exp", 0)
         
         user.coins += coins_change
         user.exp += exp_gain
         
         # 构建结果消息
-        result_message = template["description"].format(
-            nickname=user.nickname,
-            coins_change=abs(coins_change),
-            exp_gain=exp_gain
-        )
-        
+        # 结合事件描述和玩家选择的行动
+        action_text = option.get("text", "进行了一番探索")
+        result_message = f"【{template['name']}】\n{template['description']}\n主公您选择了“{action_text}”。"
+
         if coins_change > 0:
-            result_message += f"\n💰 您获得了 {coins_change} 铜钱。"
+            result_message += f"\n\n💰 您获得了 {coins_change} 铜钱。"
         elif coins_change < 0:
-            result_message += f"\n💸 您损失了 {abs(coins_change)} 铜钱。"
+            result_message += f"\n\n💸 您损失了 {abs(coins_change)} 铜钱。"
         
-        result_message += f"\n📈 您获得了 {exp_gain} 经验。"
+        if exp_gain > 0:
+            result_message += f"\n📈 您获得了 {exp_gain} 经验。"
+        elif exp_gain < 0:
+            result_message += f"\n📉 您损失了 {abs(exp_gain)} 经验。"
+
+        if coins_change == 0 and exp_gain == 0:
+             result_message += "\n\n平平无奇，什么也没有发生。"
+
         result_message += f"\n\n当前铜钱: {user.coins}, 当前经验: {user.exp}"
 
         # 更新数据库和冷却时间
@@ -310,7 +317,7 @@ class SanGuoRPGPlugin(Star):
     @filter.command("三国管理")
     async def sanguo_admin(self, event: AstrMessageEvent):
         """三国RPG插件管理命令"""
-        plain_text = event.get_plain_text().strip()
+        plain_text = event.message_str.strip()
         
         # 增加一个给予玩家资源的子命令
         # 格式: /三国管理 add <resource_type> <amount> <user_id>
