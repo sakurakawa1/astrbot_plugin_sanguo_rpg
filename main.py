@@ -308,4 +308,66 @@ class SanGuoRPGPlugin(Star):
     @filter.command("三国管理")
     async def sanguo_admin(self, event: AstrMessageEvent):
         """三国RPG插件管理命令"""
-        yield event.plain_result("命令测试成功")
+        plain_text = event.get_plain_text().strip()
+        
+        # 增加一个给予玩家资源的子命令
+        # 格式: /三国管理 add <resource_type> <amount> <user_id>
+        # 例如: /三国管理 add coins 10000 123456789
+        parts = plain_text.split()
+        if len(parts) >= 1 and parts[0] == "add":
+            if len(parts) != 4:
+                yield event.plain_result("❌ 参数格式错误。\n正确格式: /三国管理 add <resource_type> <amount> <user_id>")
+                return
+            
+            _, resource_type, amount_str, user_id = parts
+            
+            user = self.user_repo.get_by_id(user_id)
+            if not user:
+                yield event.plain_result(f"❌ 找不到用户: {user_id}")
+                return
+            
+            try:
+                amount = int(amount_str)
+            except ValueError:
+                yield event.plain_result(f"❌ 数量必须是整数: {amount_str}")
+                return
+
+            if resource_type.lower() == "coins":
+                user.coins += amount
+                self.user_repo.update(user)
+                yield event.plain_result(f"✅ 成功为用户 {user.nickname} ({user_id}) 添加了 {amount} 铜钱。")
+            elif resource_type.lower() == "yuanbao":
+                user.yuanbao += amount
+                self.user_repo.update(user)
+                yield event.plain_result(f"✅ 成功为用户 {user.nickname} ({user_id}) 添加了 {amount} 元宝。")
+            elif resource_type.lower() == "exp":
+                user.exp += amount
+                self.user_repo.update(user)
+                yield event.plain_result(f"✅ 成功为用户 {user.nickname} ({user_id}) 添加了 {amount} 经验。")
+            else:
+                yield event.plain_result(f"❌ 未知的资源类型: {resource_type}。可用: coins, yuanbao, exp")
+            return
+
+        # 保留数据库迁移功能
+        if plain_text == "migrate":
+            try:
+                db_path = "data/sanguo_rpg.db"
+                plugin_root_dir = os.path.dirname(__file__)
+                migrations_path = os.path.join(plugin_root_dir, "core", "database", "migrations")
+                run_migrations(db_path, migrations_path)
+                yield event.plain_result("✅ 数据库迁移成功完成。")
+            except Exception as e:
+                logger.error(f"手动执行数据库迁移时出错: {e}")
+                yield event.plain_result(f"❌ 数据库迁移失败: {e}")
+            return
+            
+        # 如果没有匹配的子命令，显示帮助信息
+        help_text = """
+        【三国管理】可用命令:
+        - /三国管理 migrate
+          手动执行数据库迁移。
+        - /三国管理 add <type> <amount> <user_id>
+          为指定用户添加资源。
+          <type>: coins, yuanbao, exp
+        """
+        yield event.plain_result(help_text.strip())
