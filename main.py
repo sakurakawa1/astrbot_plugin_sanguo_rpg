@@ -3,25 +3,30 @@
 # @Author  : Cline
 # @File    : main.py
 # @Software: AstrBot
-# @Description: 三国文字RPG插件主文件 (增量恢复 - 步骤4.1)
+# @Description: 三国文字RPG插件主文件 (最终修复版)
 
 import os
+import random
+import re
+from datetime import datetime, timedelta
+
 from astrbot.api import logger, AstrBotConfig
 from astrbot.api.event import filter, AstrMessageEvent, MessageEventResult
 from astrbot.api.star import Context, Star
+from astrbot.core.star.filter.permission import PermissionType
 
 from astrbot_plugin_sanguo_rpg.core.database.migration import run_migrations
 from astrbot_plugin_sanguo_rpg.core.repositories.sqlite_user_repo import SqliteUserRepository
 from astrbot_plugin_sanguo_rpg.core.repositories.sqlite_general_repo import SqliteGeneralRepository
-from astrbot_plugin_sanguo_rpg.core.services.user_service import UserService
-from astrbot_plugin_sanguo_rpg.core.services.general_service import GeneralService
 from astrbot_plugin_sanguo_rpg.core.services.data_setup_service import DataSetupService
 from astrbot_plugin_sanguo_rpg.draw.help import draw_help_image
+from astrbot_plugin_sanguo_rpg.core.adventure_templates import ADVENTURE_TEMPLATES
+from astrbot_plugin_sanguo_rpg.core.domain.models import User
 
 class SanGuoRPGPlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
-        logger.info("三国RPG插件加载中... (增量恢复 - 步骤4.1)")
+        logger.info("三国RPG插件加载中... (最终修复版)")
 
         # --- 1. 加载配置 ---
         self.game_config = {
@@ -45,15 +50,16 @@ class SanGuoRPGPlugin(Star):
         data_setup_service = DataSetupService(self.general_repo, db_path)
         data_setup_service.setup_initial_data()
         
-        self.user_service = UserService(self.user_repo, self.game_config)
-        self.general_service = GeneralService(self.general_repo, self.user_repo, self.game_config)
-        
+        # 用于存储冷却时间的字典
+        self._recruit_cooldowns = {}
+        self._adventure_cooldowns = {}
+        # 用于存储闯关上下文的字典
         self.adventure_context = {}
 
 
     async def initialize(self):
         """插件异步初始化"""
-        logger.info("三国文字RPG插件加载成功！(增量恢复 - 步骤4.1)")
+        logger.info("三国文字RPG插件加载成功！(最终修复版)")
 
     @filter.command("三国帮助", alias={"三国菜单"})
     async def sanguo_help(self, event: AstrMessageEvent):
@@ -70,15 +76,45 @@ class SanGuoRPGPlugin(Star):
         """注册用户"""
         user_id = event.get_sender_id()
         nickname = event.get_sender_name() if event.get_sender_name() is not None else event.get_sender_id()
-        result = self.user_service.register(user_id, nickname)
-        yield event.plain_result(result["message"])
+        
+        if self.user_repo.get_by_id(user_id):
+            yield event.plain_result("您已经注册过了，无需重复注册。")
+            return
+
+        new_user = User(
+            user_id=user_id,
+            nickname=nickname,
+            coins=self.game_config.get("user", {}).get("initial_coins", 1000),
+            yuanbao=self.game_config.get("user", {}).get("initial_yuanbao", 100),
+            exp=0,
+            created_at=datetime.now(),
+            last_signed_in=None
+        )
+        self.user_repo.add(new_user)
+        yield event.plain_result(f"欢迎主公 {nickname}！您已成功注册，获得初始资金，开启您的三国霸业！")
 
     @filter.command("三国签到")
     async def sign_in(self, event: AstrMessageEvent):
         """每日签到"""
         user_id = event.get_sender_id()
-        result = self.user_service.daily_sign_in(user_id)
-        yield event.plain_result(result["message"])
+        user = self.user_repo.get_by_id(user_id)
+        if not user:
+            yield event.plain_result("您尚未注册，请先使用 /三国注册 命令。")
+            return
+        
+        now = datetime.now()
+        if user.last_signed_in and user.last_signed_in.date() == now.date():
+            yield event.plain_result("你今天已经签到过了，明天再来吧！")
+            return
+            
+        coins_reward = 200
+        exp_reward = 10
+        user.coins += coins_reward
+        user.exp += exp_reward
+        user.last_signed_in = now
+        self.user_repo.update(user)
+        
+        yield event.plain_result(f"签到成功！获得 {coins_reward} 铜钱，{exp_reward} 经验。")
         
     @filter.command("三国我的信息")
     async def my_info(self, event: AstrMessageEvent):
@@ -135,3 +171,185 @@ class SanGuoRPGPlugin(Star):
         message = f"📜 【我的武将】({total_count}个)\n\n" + "\n\n".join(general_info_list)
         
         yield event.plain_result(message)
+
+    @filter.command("三国招募", alias={"三国招募武将", "三国抽卡"})
+    async def recruit_general(self, event: AstrMessageEvent):
+        """招募武将"""
+        user_id = event.get_sender_id()
+        user = self.user_repo.get_by_id(user_id)
+        if not user:
+            yield event.plain_result("请先使用 /三国注册 命令注册账户！")
+            return
+        
+        cooldown_key = f"recruit_{user_id}"
+        current_time = datetime.now()
+        
+        if cooldown_key in self._recruit_cooldowns:
+            last_recruit_time = self._recruit_cooldowns[cooldown_key]
+            cooldown_seconds = self.game_config.get("recruit", {}).get("cooldown_seconds", 300)
+            time_diff = (current_time - last_recruit_time).total_seconds()
+            
+            if time_diff < cooldown_seconds:
+                remaining_time = int(cooldown_seconds - time_diff)
+                yield event.plain_result(f"⏰ 招募冷却中，还需等待 {remaining_time} 秒后才能再次招募。")
+                return
+        
+        recruit_cost = self.game_config.get("recruit", {}).get("cost_yuanbao", 50)
+        if user.yuanbao < recruit_cost:
+            yield event.plain_result(f"💎 元宝不足！招募需要 {recruit_cost} 元宝，您当前只有 {user.yuanbao} 元宝。")
+            return
+        
+        recruited_general = self.general_repo.get_random_general_by_rarity_pool()
+        if not recruited_general:
+            yield event.plain_result("❌ 招募失败，请稍后再试。")
+            return
+        
+        user.yuanbao -= recruit_cost
+        self.user_repo.update(user)
+        
+        success = self.general_repo.add_user_general(user_id, recruited_general.general_id)
+        if not success:
+            user.yuanbao += recruit_cost
+            self.user_repo.update(user)
+            yield event.plain_result("❌ 招募失败，请稍后再试。")
+            return
+        
+        self._recruit_cooldowns[cooldown_key] = current_time
+        
+        rarity_stars = "⭐" * recruited_general.rarity
+        camp_emoji = {"蜀": "🟢", "魏": "🔵", "吴": "🟡", "群": "🔴"}.get(recruited_general.camp, "⚪")
+        
+        if recruited_general.rarity >= 5: effect = "✨🎉 传说降临！🎉✨"
+        elif recruited_general.rarity >= 4: effect = "🌟 稀有出现！🌟"
+        elif recruited_general.rarity >= 3: effect = "💫 精英到来！"
+        else: effect = "⚡ 新的伙伴！"
+        
+        message = f"""
+{effect}
+{camp_emoji} {recruited_general.name} {rarity_stars}
+阵营：{recruited_general.camp}
+武力：{recruited_general.wu_li} | 智力：{recruited_general.zhi_li}
+统帅：{recruited_general.tong_shuai} | 速度：{recruited_general.su_du}
+技能：{recruited_general.skill_desc}
+💰 花费：{recruit_cost} 元宝
+💎 剩余元宝：{user.yuanbao}
+使用 /三国我的武将 查看所有武将！
+"""
+        yield event.plain_result(message.strip())
+
+    @filter.command("三国闯关", alias={"三国冒险", "三国战斗", "三国挑战"})
+    async def adventure(self, event: AstrMessageEvent):
+        """闯关冒险"""
+        user_id = event.get_sender_id()
+        user = self.user_repo.get_by_id(user_id)
+        if not user:
+            yield event.plain_result("您尚未注册，请先使用 /三国注册 命令。")
+            return
+
+        user_generals = self.general_repo.get_user_generals(user_id)
+        if not user_generals:
+            yield event.plain_result("您还没有任何武将，请先进行招募！")
+            return
+
+        cooldown_key = f"adventure_{user_id}"
+        current_time = datetime.now()
+        
+        if cooldown_key in self._adventure_cooldowns:
+            last_adventure_time = self._adventure_cooldowns[cooldown_key]
+            cooldown_seconds = self.game_config.get("adventure", {}).get("cooldown_seconds", 600)
+            time_diff = (current_time - last_adventure_time).total_seconds()
+            
+            if time_diff < cooldown_seconds:
+                remaining_time = int(cooldown_seconds - time_diff)
+                minutes, seconds = divmod(remaining_time, 60)
+                yield event.plain_result(f"⏰ 闯关冷却中，还需等待 {minutes}分{seconds}秒后才能再次闯关。")
+                return
+
+        plain_text = event.get_plain_text().strip()
+        last_adventure = self.adventure_context.get(user_id)
+
+        if last_adventure and "requires_follow_up" in last_adventure:
+            if not plain_text:
+                yield event.plain_result(last_adventure["message"] + "\n\n请使用 `/三国闯关 [选项数字]` 回复。")
+                return
+
+            try:
+                option_index = int(plain_text) - 1
+                template = last_adventure["template"]
+                option = template['options'][option_index]
+                
+                active_generals = self.general_repo.get_user_generals(user_id)[:3]
+                success_rate_bonus, coin_bonus_multiplier, exp_bonus_multiplier = 0, 1.0, 1.0
+                
+                for ug in active_generals:
+                    g = self.general_repo.get_general_by_id(ug.general_id)
+                    if g and g.skill_desc != "无":
+                        bonuses = re.findall(r"(\w+)增加(\d+)%", g.skill_desc)
+                        for bonus_type, bonus_value in bonuses:
+                            if "成功率" in bonus_type: success_rate_bonus += int(bonus_value) / 100
+                            elif "金币" in bonus_type: coin_bonus_multiplier += int(bonus_value) / 100
+                            elif "经验" in bonus_type: exp_bonus_multiplier += int(bonus_value) / 100
+                
+                success = random.random() < (option['success_rate'] + success_rate_bonus)
+                
+                if success:
+                    rewards = option['rewards']
+                    coins_reward = int(rewards.get('coins', 0) * coin_bonus_multiplier)
+                    exp_reward = int(rewards.get('exp', 0) * exp_bonus_multiplier)
+                    
+                    user.coins += coins_reward
+                    user.exp += exp_reward
+                    self.user_repo.update(user)
+                    
+                    reward_text = []
+                    if coins_reward != 0: reward_text.append(f"{coins_reward} 铜钱")
+                    if exp_reward != 0: reward_text.append(f"{exp_reward} 经验")
+                    
+                    self._adventure_cooldowns[cooldown_key] = current_time
+                    yield event.plain_result(f"【{template['name']}】\n成功！你获得了 {'、'.join(reward_text)}。")
+                else:
+                    self._adventure_cooldowns[cooldown_key] = current_time + timedelta(minutes=5)
+                    yield event.plain_result(f"【{template['name']}】\n{option['failure_text']}\n闯关冷却时间增加5分钟。")
+                
+                if user_id in self.adventure_context:
+                    del self.adventure_context[user_id]
+
+            except (ValueError, IndexError):
+                yield event.plain_result("无效的选项，请输入数字。")
+            return
+        else:
+            template = random.choice(ADVENTURE_TEMPLATES)
+            options_text = "\n".join([f"{i+1}. {opt['text']}" for i, opt in enumerate(template['options'])])
+            
+            self.adventure_context[user_id] = {
+                "message": f"【{template['name']}】\n{template['description']}\n\n请选择：\n{options_text}",
+                "requires_follow_up": True,
+                "template": template
+            }
+            yield event.plain_result(self.adventure_context[user_id]["message"] + "\n\n请使用 `/三国闯关 [选项数字]` 回复。")
+
+    @filter.command("三国挂机闯关")
+    async def auto_adventure(self, event: AstrMessageEvent):
+        """自动闯关"""
+        user_id = event.get_sender_id()
+        # This is a simplified version. A full implementation would reuse the adventure logic.
+        yield event.plain_result("挂机功能正在开发中...")
+
+    @filter.permission_type(PermissionType.ADMIN)
+    @filter.command("三国管理")
+    async def sanguo_admin(self, event: AstrMessageEvent):
+        """三国RPG插件管理命令"""
+        plain_text = event.get_plain_text().strip()
+        
+        if plain_text == "migrate":
+            try:
+                db_path = "data/sanguo_rpg.db"
+                plugin_root_dir = os.path.dirname(__file__)
+                migrations_path = os.path.join(plugin_root_dir, "core", "database", "migrations")
+                run_migrations(db_path, migrations_path)
+                yield event.plain_result("✅ 数据库迁移成功完成。")
+            except Exception as e:
+                logger.error(f"手动执行数据库迁移时出错: {e}")
+                yield event.plain_result(f"❌ 数据库迁移失败: {e}")
+        else:
+            yield event.plain_result("无效的管理命令。可用命令: migrate")
