@@ -3,7 +3,7 @@
 # @Author  : Cline
 # @File    : main.py
 # @Software: AstrBot
-# @Description: 三国文字RPG插件主文件 (最终修复版)
+# @Description: 三国文字RPG插件主文件 (最终修复版 - 调试)
 
 import os
 import random
@@ -26,7 +26,7 @@ from astrbot_plugin_sanguo_rpg.core.domain.models import User
 class SanGuoRPGPlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
-        logger.info("三国RPG插件加载中... (最终修复版)")
+        logger.info("三国RPG插件加载中... (最终修复版 - 调试)")
 
         # --- 1. 加载配置 ---
         self.game_config = {
@@ -59,7 +59,7 @@ class SanGuoRPGPlugin(Star):
 
     async def initialize(self):
         """插件异步初始化"""
-        logger.info("三国文字RPG插件加载成功！(最终修复版)")
+        logger.info("三国文字RPG插件加载成功！(最终修复版 - 调试)")
 
     @filter.command("三国帮助", alias={"三国菜单"})
     async def sanguo_help(self, event: AstrMessageEvent):
@@ -237,119 +237,18 @@ class SanGuoRPGPlugin(Star):
 """
         yield event.plain_result(message.strip())
 
-    @filter.command("三国闯关", alias={"三国冒险", "三国战斗", "三国挑战"})
-    async def adventure(self, event: AstrMessageEvent):
-        """闯关冒险"""
-        user_id = event.get_sender_id()
-        user = self.user_repo.get_by_id(user_id)
-        if not user:
-            yield event.plain_result("您尚未注册，请先使用 /三国注册 命令。")
-            return
+    # @filter.command("三国闯关", alias={"三国冒险", "三国战斗", "三国挑战"})
+    # async def adventure(self, event: AstrMessageEvent):
+    #     """闯关冒险"""
+    #     pass
 
-        user_generals = self.general_repo.get_user_generals(user_id)
-        if not user_generals:
-            yield event.plain_result("您还没有任何武将，请先进行招募！")
-            return
+    # @filter.command("三国挂机闯关")
+    # async def auto_adventure(self, event: AstrMessageEvent):
+    #     """自动闯关"""
+    #     pass
 
-        cooldown_key = f"adventure_{user_id}"
-        current_time = datetime.now()
-        
-        if cooldown_key in self._adventure_cooldowns:
-            last_adventure_time = self._adventure_cooldowns[cooldown_key]
-            cooldown_seconds = self.game_config.get("adventure", {}).get("cooldown_seconds", 600)
-            time_diff = (current_time - last_adventure_time).total_seconds()
-            
-            if time_diff < cooldown_seconds:
-                remaining_time = int(cooldown_seconds - time_diff)
-                minutes, seconds = divmod(remaining_time, 60)
-                yield event.plain_result(f"⏰ 闯关冷却中，还需等待 {minutes}分{seconds}秒后才能再次闯关。")
-                return
-
-        plain_text = event.get_plain_text().strip()
-        last_adventure = self.adventure_context.get(user_id)
-
-        if last_adventure and "requires_follow_up" in last_adventure:
-            if not plain_text:
-                yield event.plain_result(last_adventure["message"] + "\n\n请使用 `/三国闯关 [选项数字]` 回复。")
-                return
-
-            try:
-                option_index = int(plain_text) - 1
-                template = last_adventure["template"]
-                option = template['options'][option_index]
-                
-                active_generals = self.general_repo.get_user_generals(user_id)[:3]
-                success_rate_bonus, coin_bonus_multiplier, exp_bonus_multiplier = 0, 1.0, 1.0
-                
-                for ug in active_generals:
-                    g = self.general_repo.get_general_by_id(ug.general_id)
-                    if g and g.skill_desc != "无":
-                        bonuses = re.findall(r"(\w+)增加(\d+)%", g.skill_desc)
-                        for bonus_type, bonus_value in bonuses:
-                            if "成功率" in bonus_type: success_rate_bonus += int(bonus_value) / 100
-                            elif "金币" in bonus_type: coin_bonus_multiplier += int(bonus_value) / 100
-                            elif "经验" in bonus_type: exp_bonus_multiplier += int(bonus_value) / 100
-                
-                success = random.random() < (option['success_rate'] + success_rate_bonus)
-                
-                if success:
-                    rewards = option['rewards']
-                    coins_reward = int(rewards.get('coins', 0) * coin_bonus_multiplier)
-                    exp_reward = int(rewards.get('exp', 0) * exp_bonus_multiplier)
-                    
-                    user.coins += coins_reward
-                    user.exp += exp_reward
-                    self.user_repo.update(user)
-                    
-                    reward_text = []
-                    if coins_reward != 0: reward_text.append(f"{coins_reward} 铜钱")
-                    if exp_reward != 0: reward_text.append(f"{exp_reward} 经验")
-                    
-                    self._adventure_cooldowns[cooldown_key] = current_time
-                    yield event.plain_result(f"【{template['name']}】\n成功！你获得了 {'、'.join(reward_text)}。")
-                else:
-                    self._adventure_cooldowns[cooldown_key] = current_time + timedelta(minutes=5)
-                    yield event.plain_result(f"【{template['name']}】\n{option['failure_text']}\n闯关冷却时间增加5分钟。")
-                
-                if user_id in self.adventure_context:
-                    del self.adventure_context[user_id]
-
-            except (ValueError, IndexError):
-                yield event.plain_result("无效的选项，请输入数字。")
-            return
-        else:
-            template = random.choice(ADVENTURE_TEMPLATES)
-            options_text = "\n".join([f"{i+1}. {opt['text']}" for i, opt in enumerate(template['options'])])
-            
-            self.adventure_context[user_id] = {
-                "message": f"【{template['name']}】\n{template['description']}\n\n请选择：\n{options_text}",
-                "requires_follow_up": True,
-                "template": template
-            }
-            yield event.plain_result(self.adventure_context[user_id]["message"] + "\n\n请使用 `/三国闯关 [选项数字]` 回复。")
-
-    @filter.command("三国挂机闯关")
-    async def auto_adventure(self, event: AstrMessageEvent):
-        """自动闯关"""
-        user_id = event.get_sender_id()
-        # This is a simplified version. A full implementation would reuse the adventure logic.
-        yield event.plain_result("挂机功能正在开发中...")
-
-    @filter.permission_type(PermissionType.ADMIN)
-    @filter.command("三国管理")
-    async def sanguo_admin(self, event: AstrMessageEvent):
-        """三国RPG插件管理命令"""
-        plain_text = event.get_plain_text().strip()
-        
-        if plain_text == "migrate":
-            try:
-                db_path = "data/sanguo_rpg.db"
-                plugin_root_dir = os.path.dirname(__file__)
-                migrations_path = os.path.join(plugin_root_dir, "core", "database", "migrations")
-                run_migrations(db_path, migrations_path)
-                yield event.plain_result("✅ 数据库迁移成功完成。")
-            except Exception as e:
-                logger.error(f"手动执行数据库迁移时出错: {e}")
-                yield event.plain_result(f"❌ 数据库迁移失败: {e}")
-        else:
-            yield event.plain_result("无效的管理命令。可用命令: migrate")
+    # @filter.permission_type(PermissionType.ADMIN)
+    # @filter.command("三国管理")
+    # async def sanguo_admin(self, event: AstrMessageEvent):
+    #     """三国RPG插件管理命令"""
+    #     pass
