@@ -84,8 +84,6 @@ class SanGuoRPGPlugin(Star):
     async def my_info(self, event: AstrMessageEvent):
         """查看我的信息"""
         user_id = event.get_sender_id()
-        
-        # --- 直接在此处实现 get_user_info 的逻辑 ---
         user = self.user_repo.get_by_id(user_id)
         if not user:
             yield event.plain_result("您尚未注册，请先使用 /三国注册 命令。")
@@ -100,3 +98,40 @@ class SanGuoRPGPlugin(Star):
             f"📅 注册时间: {user.created_at.strftime('%Y-%m-%d %H:%M:%S')}"
         )
         yield event.plain_result(info)
+        
+    @filter.command("三国我的武将", alias={"三国武将列表", "三国查看武将"})
+    async def my_generals(self, event: AstrMessageEvent):
+        """查看我的武将"""
+        user_id = event.get_sender_id()
+        user_generals = self.general_repo.get_user_generals(user_id)
+        
+        if not user_generals:
+            yield event.plain_result("您还没有任何武将，请先进行招募！\n使用 /三国招募 来获取您的第一个武将。")
+            return
+        
+        general_info_list = []
+        for user_general in user_generals:
+            general_template = self.general_repo.get_general_by_id(user_general.general_id)
+            if general_template:
+                level_bonus = (user_general.level - 1) * 0.1
+                wu_li = int(general_template.wu_li * (1 + level_bonus))
+                zhi_li = int(general_template.zhi_li * (1 + level_bonus))
+                tong_shuai = int(general_template.tong_shuai * (1 + level_bonus))
+                su_du = int(general_template.su_du * (1 + level_bonus))
+                
+                rarity_stars = "⭐" * general_template.rarity
+                camp_emoji = {"蜀": "🟢", "魏": "🔵", "吴": "🟡", "群": "🔴"}.get(general_template.camp, "⚪")
+                
+                general_info = f"""
+{camp_emoji} {general_template.name} {rarity_stars}
+等级：{user_general.level} | 经验：{user_general.exp}/100
+武力：{wu_li} | 智力：{zhi_li}
+统帅：{tong_shuai} | 速度：{su_du}
+技能：{general_template.skill_desc}
+"""
+                general_info_list.append(general_info.strip())
+        
+        total_count = len(user_generals)
+        message = f"📜 【我的武将】({total_count}个)\n\n" + "\n\n".join(general_info_list)
+        
+        yield event.plain_result(message)
