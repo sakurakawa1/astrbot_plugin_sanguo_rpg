@@ -26,7 +26,8 @@ from astrbot_plugin_sanguo_rpg.core.domain.models import User
 class SanGuoRPGPlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
-        logger.info("三国RPG插件加载中... (最终修复版 - 桩函数调试)")
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        logger.info(f"三国RPG插件加载中... (V2 - {timestamp})")
 
         # --- 1. 加载配置 ---
         self.game_config = {
@@ -59,7 +60,8 @@ class SanGuoRPGPlugin(Star):
 
     async def initialize(self):
         """插件异步初始化"""
-        logger.info("三国文字RPG插件加载成功！(最终修复版 - 桩函数调试)")
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        logger.info(f"三国文字RPG插件加载成功！(V2 - {timestamp})")
 
     @filter.command("三国帮助", alias={"三国菜单"})
     async def sanguo_help(self, event: AstrMessageEvent):
