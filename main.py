@@ -240,7 +240,64 @@ class SanGuoRPGPlugin(Star):
     @filter.command("三国闯关", alias={"三国冒险", "三国战斗", "三国挑战"})
     async def adventure(self, event: AstrMessageEvent):
         """闯关冒险"""
-        yield event.plain_result("命令测试成功")
+        user_id = event.get_sender_id()
+        user = self.user_repo.get_by_id(user_id)
+
+        if not user:
+            yield event.plain_result("您尚未注册，请先使用 /三国注册 命令。")
+            return
+
+        # 冷却时间检查
+        cooldown_key = f"adventure_{user_id}"
+        current_time = datetime.now()
+        cooldown_seconds = self.game_config.get("adventure", {}).get("cooldown_seconds", 600)
+
+        if cooldown_key in self._adventure_cooldowns:
+            last_adventure_time = self._adventure_cooldowns[cooldown_key]
+            time_diff = (current_time - last_adventure_time).total_seconds()
+            if time_diff < cooldown_seconds:
+                remaining_time = int(cooldown_seconds - time_diff)
+                yield event.plain_result(f"⚔️ 闯关冷却中，还需等待 {remaining_time} 秒。")
+                return
+
+        # 检查并扣除费用
+        cost = self.game_config.get("adventure", {}).get("cost_coins", 50)
+        if user.coins < cost:
+            yield event.plain_result(f"💰 铜钱不足！闯关需要 {cost} 铜钱，您只有 {user.coins}。")
+            return
+        
+        user.coins -= cost
+
+        # --- 核心冒险逻辑 ---
+        template = random.choice(ADVENTURE_TEMPLATES)
+        
+        # 奖励与惩罚
+        coins_change = random.randint(template["coins_reward_min"], template["coins_reward_max"])
+        exp_gain = random.randint(template["exp_reward_min"], template["exp_reward_max"])
+        
+        user.coins += coins_change
+        user.exp += exp_gain
+        
+        # 构建结果消息
+        result_message = template["description"].format(
+            nickname=user.nickname,
+            coins_change=abs(coins_change),
+            exp_gain=exp_gain
+        )
+        
+        if coins_change > 0:
+            result_message += f"\n💰 您获得了 {coins_change} 铜钱。"
+        elif coins_change < 0:
+            result_message += f"\n💸 您损失了 {abs(coins_change)} 铜钱。"
+        
+        result_message += f"\n📈 您获得了 {exp_gain} 经验。"
+        result_message += f"\n\n当前铜钱: {user.coins}, 当前经验: {user.exp}"
+
+        # 更新数据库和冷却时间
+        self.user_repo.update(user)
+        self._adventure_cooldowns[cooldown_key] = current_time
+        
+        yield event.plain_result(result_message)
 
     @filter.command("三国挂机闯关")
     async def auto_adventure(self, event: AstrMessageEvent):
