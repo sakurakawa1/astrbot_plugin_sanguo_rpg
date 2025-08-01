@@ -6,6 +6,7 @@
 # @Description: 用于初始化核心游戏数据的服务
 
 import sqlite3
+import json
 from astrbot_plugin_sanguo_rpg.core.repositories.sqlite_general_repo import SqliteGeneralRepository
 
 class DataSetupService:
@@ -14,9 +15,10 @@ class DataSetupService:
         self.db_path = db_path
 
     def setup_initial_data(self):
-        """检查并初始化核心数据，如武将模板"""
+        """检查并初始化核心数据，如武将模板和副本"""
         self._create_tables()
         self._seed_generals()
+        self._seed_dungeons()
 
     def _create_tables(self):
         """创建数据库表（如果不存在）"""
@@ -597,3 +599,30 @@ class DataSetupService:
                 updated_generals.append(tuple(general_list))
 
             self.general_repo.add_sample_generals(updated_generals)
+
+    def _seed_dungeons(self):
+        """填充初始副本数据（如果为空）"""
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT COUNT(*) FROM dungeons")
+            count = cursor.fetchone()[0]
+            
+            if count == 0:
+                dungeons_data = [
+                    (1, '黄巾前哨', '遭遇零散的黄巾军，小试牛刀。', 1, 1.0, 1.5, json.dumps({"coins": 50, "yuanbao": 10, "user_exp": 10, "general_exp": 20})),
+                    (2, '汜水关', '联合军在此受阻，需要一位英雄打开局面。', 3, 1.2, 1.8, json.dumps({"coins": 100, "yuanbao": 10, "user_exp": 20, "general_exp": 40})),
+                    (3, '虎牢关', '吕布之威震慑天下，挑战他的先锋部队。', 5, 1.5, 2.0, json.dumps({"coins": 180, "yuanbao": 10, "user_exp": 35, "general_exp": 70})),
+                    (4, '北海救援', '孔融被围，你需要突破敌军的封锁。', 7, 1.5, 2.2, json.dumps({"coins": 250, "yuanbao": 12, "user_exp": 50, "general_exp": 100})),
+                    (5, '徐州之战', '曹操与陶谦的纷争，战场局势复杂。', 9, 1.8, 2.5, json.dumps({"coins": 350, "yuanbao": 12, "user_exp": 70, "general_exp": 140})),
+                    (6, '官渡前哨', '袁绍大军压境，在官渡外围展开激战。', 11, 2.0, 2.8, json.dumps({"coins": 500, "yuanbao": 15, "user_exp": 90, "general_exp": 180})),
+                    (7, '长坂坡', '在曹军的追击下，保护百姓，杀出重围。', 13, 2.2, 3.0, json.dumps({"coins": 700, "yuanbao": 20, "user_exp": 120, "general_exp": 240})),
+                    (8, '赤壁疑兵', '草船借箭，利用大雾和智谋扰乱曹军。', 15, 2.5, 3.2, json.dumps({"coins": 900, "yuanbao": 30, "user_exp": 150, "general_exp": 300})),
+                    (9, '合肥之战', '张辽威震逍遥津，你需要面对精锐的魏军。', 17, 2.8, 3.5, json.dumps({"coins": 1200, "yuanbao": 40, "user_exp": 180, "general_exp": 360})),
+                    (10, '汉中定军山', '老将黄忠刀劈夏侯渊，争夺汉中的关键一役。', 20, 3.0, 4.0, json.dumps({"coins": 1500, "yuanbao": 50, "user_exp": 220, "general_exp": 440}))
+                ]
+                
+                cursor.executemany("""
+                    INSERT INTO dungeons (id, name, description, recommended_level, enemy_strength_min, enemy_strength_max, rewards)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, dungeons_data)
+                conn.commit()

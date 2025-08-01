@@ -63,12 +63,12 @@ class SqliteUserRepository:
                         yuanbao=row["yuanbao"] if "yuanbao" in row_keys else 0,
                         exp=row["exp"] if "exp" in row_keys else 0,
                         level=row["level"] if "level" in row_keys else 1,
+                        created_at=created_at,
+                        last_signed_in=last_signed_in,
                         reputation=row["reputation"] if "reputation" in row_keys else 0,
                         health=row["health"] if "health" in row_keys else 100,
                         status=row["status"] if "status" in row_keys else "正常",
-                        title=row["title"] if "title" in row_keys else None,
-                        created_at=created_at,
-                        last_signed_in=last_signed_in
+                        title=row["title"] if "title" in row_keys else None
                     )
                 except KeyError:
                     return None

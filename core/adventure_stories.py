@@ -407,12 +407,83 @@ EVENTS = [
             {"text": "继续深入探索。", "next_stage": "mine_deep_explore"},
             {"text": "觉得不对劲，立刻退出。", "next_stage": "mine_exit_safely"},
         ]
+    },
+    # --- 新增：失窃的传家宝任务线 ---
+    {
+        "id": "eavesdrop_plot",
+        "tags": ["social", "information", "rest"],
+        "template": "你找了个角落坐下，点了一壶酒。邻桌两个商贾模样的人正在低声交谈，你无意中听到他们提及‘传家宝’、‘城外废塔’和‘今晚交易’等字眼。",
+        "options": [
+            {"text": "悄悄听下去，获取更多信息。", "next_stage": "plot_details"},
+            {"text": "事不关己，不去理会。", "next_stage": "generic_end_nothing_happened"},
+        ]
+    },
+    # --- 新增：剿灭黄巾据点任务线 ---
+    {
+        "id": "yellow_turban_stronghold_clue",
+        "tags": ["yellow_turban", "wild", "conflict", "military"],
+        "template": "你击溃了一小队黄巾巡逻兵，在他们的首领身上，你发现了一封密信，似乎指向了附近山中的一个秘密据点。",
+        "options": [
+            {"text": "查看密信，了解详情。", "next_stage": "yt_stronghold_investigate_choice"},
+            {"text": "不感兴趣，将信件丢弃。", "next_stage": "generic_end_nothing_happened"},
+        ]
     }
 ]
 
 # 3. 结局/后续阶段模块 (Resolution)
+# 3. 结局/后续阶段模块 (Resolution)
 # 定义事件发展的结果，可以是最终结局，也可以是新的选择
 RESOLUTIONS = {
+    # --- 新增：剿灭黄巾据点任务线 ---
+    "yt_stronghold_investigate_choice": {
+        "type": "choice",
+        "template": "密信揭示了黄巾军据点的具体位置和兵力部署。这是一个立功的好机会，你决定：",
+        "options": [
+            {"text": "单枪匹马，深入侦查。", "next_stage": "yt_stronghold_solo_choice"},
+            {"text": "报告官府，寻求支援。", "next_stage": "yt_stronghold_report_choice"},
+        ]
+    },
+    "yt_stronghold_solo_choice": {
+        "type": "choice",
+        "template": "你决定独自行动。来到据点外，你发现营寨防守严密。你要如何行动？",
+        "options": [
+            {"text": "趁夜色潜入，刺探情报。", "next_stage": "yt_stronghold_sneak_success"},
+            {"text": "制造混乱，正面强攻。", "next_stage": "yt_stronghold_assault_fail"},
+        ]
+    },
+    "yt_stronghold_report_choice": {
+        "type": "choice",
+        "template": "你将情报呈报给最近的县城。县尉大喜，但对你的能力表示怀疑，询问你希望如何参与。",
+        "options": [
+            {"text": "担当向导，与官兵同去。", "next_stage": "yt_stronghold_guide_success"},
+            {"text": "仅提供情报，坐等奖赏。", "next_stage": "yt_stronghold_wait_reward"},
+        ]
+    },
+    "yt_stronghold_sneak_success": {
+        "type": "final",
+        "template": "你凭借高超的技巧成功潜入据点，摸清了敌人的粮仓位置和首领营帐。你悄然纵火，据点顿时大乱，你趁机安全撤离。你的智谋和胆识获得了极高的评价。",
+        "rewards": {"reputation": 15, "exp": 80, "items": ["黄巾军详细部署图"]},
+        "end": True
+    },
+    "yt_stronghold_assault_fail": {
+        "type": "final",
+        "template": "你的鲁莽让你陷入了重围。虽然你奋力拼杀，最终得以逃脱，但也身受重伤，损失惨重。",
+        "rewards": {"exp": 20, "health": -30, "coins": -50},
+        "end": True
+    },
+    "yt_stronghold_guide_success": {
+        "type": "final",
+        "template": "在你的带领下，官军成功突袭了黄巾据点，大获全胜。作为首功之臣，你获得了丰厚的金钱和官职奖赏。",
+        "rewards": {"coins": 400, "reputation": 10, "exp": 60, "items": ["县尉的推荐信"]},
+        "end": True
+    },
+    "yt_stronghold_wait_reward": {
+        "type": "final",
+        "template": "官军根据你的情报成功剿匪，但把大部分功劳归于自己。你只获得了少量奖赏，心中颇为不平。",
+        "rewards": {"coins": 100, "reputation": 2, "exp": 20},
+        "end": True
+    },
+
     # --- 新增低等级事件结局 ---
     "kill_scout_success": {
         "type": "final",
@@ -798,6 +869,71 @@ RESOLUTIONS = {
         "type": "final",
         "template": "你与矿工们发生激战，虽然你成功击败了他们，但也受了不轻的伤。你从他们身上搜刮到了一些稀有的黑铁矿石。",
         "rewards": {"items": ["黑铁矿石"], "exp": 25, "health": -20},
+        "end": True
+    },
+
+    # --- 新增：失窃的传家宝任务线 ---
+    "plot_details": {
+        "type": "choice",
+        "template": "你凝神细听，原来是本地富商张员外的传家宝玉佩被盗，盗贼正准备今晚在城外的废塔进行销赃。你知道了此事，心中思量起来。",
+        "options": [
+            {"text": "决定插手，前往废塔。", "next_stage": "go_to_tower"},
+            {"text": "将此事告知官府。", "next_stage": "inform_officials"},
+            {"text": "去通知张员外本人。", "next_stage": "inform_zhang"}
+        ]
+    },
+    "go_to_tower": {
+        "type": "choice",
+        "template": "夜色如墨，你来到城外废塔。塔内果然有几个人影在鬼鬼祟祟地交易。你躲在暗处，看到盗贼拿出了那块晶莹剔透的玉佩。",
+        "options": [
+            {"text": "直接冲出去，武力夺回玉佩。", "next_stage": "tower_fight"},
+            {"text": "制造声响，趁机偷回玉佩。", "next_stage": "tower_sneak"}
+        ]
+    },
+    "tower_fight": {
+        "type": "final",
+        "template": "你如猛虎下山，冲向盗贼。他们猝不及防，一番打斗后被你尽数制服。你夺回了玉佩，第二天将其归还给了张员外，员外大喜，重赏了你。",
+        "rewards": {"coins": 500, "reputation": 10, "exp": 50},
+        "end": True
+    },
+    "tower_sneak": {
+        "type": "final",
+        "template": "你扔出一块石子，成功吸引了他们的注意。趁他们外出查看之际，你闪身而入，迅速拿走了桌上的玉佩，消失在夜色中。第二天你将玉佩归还张员外，他虽不知过程，但仍对你感激不尽。",
+        "rewards": {"coins": 300, "reputation": 5, "exp": 60},
+        "end": True
+    },
+    "inform_officials": {
+        "type": "choice",
+        "template": "你来到衙门，将听到的消息告知了当值的捕头。捕头听后，将信将疑地看着你。",
+        "options": [
+            {"text": "拿出你的侠义之气说服他。", "next_stage": "officials_persuade"},
+            {"text": "表示愿意带路，一同前往。", "next_stage": "officials_lead"}
+        ]
+    },
+    "officials_persuade": {
+        "type": "final",
+        "template": "你的言辞恳切，一身正气，捕头最终相信了你，立刻点齐人马前往废塔，成功将盗贼一网打尽。事后，你因举报有功，获得了官府的奖赏。",
+        "rewards": {"coins": 200, "reputation": 8, "exp": 30},
+        "end": True
+    },
+    "officials_lead": {
+        "type": "final",
+        "template": "你带领官兵埋伏在废塔周围，待盗贼交易时，一声令下，官兵们一拥而上，将人赃并获。你因协助办案，获得了丰厚的奖赏。",
+        "rewards": {"coins": 250, "reputation": 10, "exp": 40},
+        "end": True
+    },
+    "inform_zhang": {
+        "type": "choice",
+        "template": "你找到张员外的府邸，将事情原委告知。张员外听后大惊，随即请求你帮助他夺回玉佩，并许诺重金酬谢。",
+        "options": [
+            {"text": "答应请求，并要求他派家丁协助。", "next_stage": "zhang_with_help"},
+            {"text": "答应请求，但决定单独行动。", "next_stage": "go_to_tower"}
+        ]
+    },
+    "zhang_with_help": {
+        "type": "final",
+        "template": "你带着张员外府上的几名精壮家丁一同前往废塔。人多势众，你们很轻松地就制服了盗贼，夺回了玉佩。张员外兑现承诺，给了你一大笔酬金。",
+        "rewards": {"coins": 600, "reputation": 5, "exp": 40},
         "end": True
     }
 }

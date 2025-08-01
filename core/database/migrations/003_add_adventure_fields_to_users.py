@@ -5,25 +5,26 @@
 # @Software: AstrBot
 # @Description: 为 users 表添加冒险所需的新字段
 
+def column_exists(cursor, table_name, column_name):
+    """检查表中是否存在指定的列"""
+    cursor.execute(f"PRAGMA table_info({table_name})")
+    columns = [row[1] for row in cursor.fetchall()]
+    return column_name in columns
+
 def upgrade(cursor):
     """
     升级数据库
     """
-    # 使用安全的方式添加新列，避免在列已存在时出错
-    try:
-        cursor.execute("ALTER TABLE users ADD COLUMN reputation INTEGER NOT NULL DEFAULT 0;")
-    except Exception:
-        pass  # 列可能已存在
+    table_name = "users"
+    columns_to_add = {
+        "reputation": "INTEGER NOT NULL DEFAULT 0",
+        "health": "INTEGER NOT NULL DEFAULT 100",
+        "status": "TEXT NOT NULL DEFAULT '正常'"
+    }
 
-    try:
-        cursor.execute("ALTER TABLE users ADD COLUMN health INTEGER NOT NULL DEFAULT 100;")
-    except Exception:
-        pass  # 列可能已存在
-
-    try:
-        cursor.execute("ALTER TABLE users ADD COLUMN status TEXT NOT NULL DEFAULT '正常';")
-    except Exception:
-        pass  # 列可能已存在
+    for column, definition in columns_to_add.items():
+        if not column_exists(cursor, table_name, column):
+            cursor.execute(f"ALTER TABLE {table_name} ADD COLUMN {column} {definition};")
 
 def downgrade(cursor):
     """

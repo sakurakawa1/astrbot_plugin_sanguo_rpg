@@ -23,7 +23,7 @@ class SqliteGeneralRepository:
         cursor = conn.cursor()
         try:
             cursor.executemany(
-                "INSERT INTO generals (general_id, name, rarity, camp, wu_li, zhi_li, tong_shuai, su_du, skill_desc, background) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "INSERT OR IGNORE INTO generals (general_id, name, rarity, camp, wu_li, zhi_li, tong_shuai, su_du, skill_desc, background) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 generals_data
             )
             conn.commit()
@@ -141,6 +141,65 @@ class SqliteGeneralRepository:
             # 将字符串时间转换为datetime对象
             created_at = datetime.fromisoformat(row[5]) if row[5] else datetime.now()
             # 实例化新的数据模型
+            detailed_generals.append(UserGeneralDetails(
+                instance_id=row[0],
+                user_id=row[1],
+                general_id=row[2],
+                level=row[3],
+                exp=row[4],
+                created_at=created_at,
+                name=row[6],
+                rarity=row[7],
+                camp=row[8],
+                wu_li=row[9],
+                zhi_li=row[10],
+                tong_shuai=row[11],
+                su_du=row[12],
+                skill_desc=row[13]
+            ))
+            
+        return detailed_generals
+
+    def get_user_generals_with_details_by_instance_ids(self, user_id: str, instance_ids: List[int]) -> List[UserGeneralDetails]:
+        """根据实例ID列表获取玩家拥有的武将（包含详细信息）"""
+        if not instance_ids:
+            return []
+            
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+
+        # 使用JOIN查询合并两个表的数据
+        # 使用参数化查询防止SQL注入
+        placeholders = ','.join('?' for _ in instance_ids)
+        sql = f"""
+            SELECT
+                ug.instance_id,
+                ug.user_id,
+                ug.general_id,
+                ug.level,
+                ug.exp,
+                ug.created_at,
+                g.name,
+                g.rarity,
+                g.camp,
+                g.wu_li,
+                g.zhi_li,
+                g.tong_shuai,
+                g.su_du,
+                g.skill_desc
+            FROM user_generals ug
+            JOIN generals g ON ug.general_id = g.general_id
+            WHERE ug.user_id = ? AND ug.instance_id IN ({placeholders})
+        """
+        
+        params = [user_id] + instance_ids
+        cursor.execute(sql, params)
+        rows = cursor.fetchall()
+        conn.close()
+        
+        detailed_generals = []
+        for row in rows:
+            created_at = datetime.fromisoformat(row[5]) if row[5] else datetime.now()
             detailed_generals.append(UserGeneralDetails(
                 instance_id=row[0],
                 user_id=row[1],

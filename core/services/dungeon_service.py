@@ -3,18 +3,20 @@
 # @Author  : Cline
 # @File    : dungeon_service.py
 # @Software: AstrBot
-# @Description: 副本服务
+# @Description: 副本与战斗服务
 
 import random
 from typing import List
 from ..repositories.sqlite_dungeon_repo import DungeonRepository
 from ..repositories.sqlite_user_repo import SqliteUserRepository
-from ..domain.models import User
+from ..repositories.sqlite_general_repo import SqliteGeneralRepository
+from ..domain.models import User, UserGeneralDetails
 
 class DungeonService:
-    def __init__(self, dungeon_repo: DungeonRepository, user_repo: SqliteUserRepository):
+    def __init__(self, dungeon_repo: DungeonRepository, user_repo: SqliteUserRepository, general_repo: SqliteGeneralRepository):
         self.dungeon_repo = dungeon_repo
         self.user_repo = user_repo
+        self.general_repo = general_repo
 
     def list_dungeons(self, user: User) -> str:
         """获取并格式化副本列表"""
@@ -28,55 +30,113 @@ class DungeonService:
             unlocked = user.level >= d.recommended_level
             status_emoji = "✅" if unlocked else "🔒"
             
-            message += f"{status_emoji} {d.name} (推荐等级: {d.recommended_level})\n"
+            message += f"{status_emoji} [ID: {d.dungeon_id}] {d.name} (推荐等级: {d.recommended_level})\n"
             message += f"   - {d.description}\n\n"
         
-        message += "使用 `/三国副本 [副本名称]` 来开始挑战。"
+        message += "使用 `/三国战斗 [副本ID]` 来查看详情并发起挑战。"
         return message.strip()
 
-    def start_dungeon(self, user: User, dungeon_name: str) -> str:
-        """开始挑战一个副本"""
-        dungeon = self.dungeon_repo.get_dungeon_by_name(dungeon_name)
-
+    def get_eligible_generals_for_dungeon(self, user_id: str, dungeon_id: int) -> str:
+        """
+        处理 `/三国战斗 [副本ID]` 命令。
+        检查是否可以挑战，并列出符合条件的武将。
+        """
+        dungeon = self.dungeon_repo.get_dungeon_by_id(dungeon_id)
         if not dungeon:
-            return f"未找到名为“{dungeon_name}”的副本。"
+            return f"未找到ID为 {dungeon_id} 的副本。"
 
-        # 1. 检查等级
-        if user.level < dungeon.recommended_level:
-            return f"🔒 等级不足，无法挑战【{dungeon.name}】。推荐等级: {dungeon.recommended_level}，您的等级: {user.level}。"
+        all_user_generals = self.general_repo.get_user_generals_with_details(user_id)
+        eligible_generals = [g for g in all_user_generals if g.level >= dungeon.recommended_level]
 
-        # 2. 检查入场费
-        if user.coins < dungeon.entry_fee:
-            return f"💰 铜钱不足！进入【{dungeon.name}】需要 {dungeon.entry_fee} 铜钱，您只有 {user.coins}。"
+        if not eligible_generals:
+            return f"你没有任何武将达到推荐等级 {dungeon.recommended_level}，无法挑战【{dungeon.name}】。"
 
-        # 3. 扣除费用
-        user.coins -= dungeon.entry_fee
-        self.user_repo.update(user)
+        message = f"请选择武将挑战【{dungeon.name}】(推荐等级: {dungeon.recommended_level}):\n\n"
+        for g in eligible_generals:
+            message += f"🔹 [ID: {g.instance_id}] {g.name} (Lv.{g.level}, 战力: {g.combat_power:.0f})\n"
+        
+        message += f"\n👉 请回复 `/确认出战 {dungeon_id} [武将ID1] [武将ID2]...` 来开始战斗。"
+        return message
 
-        # 4. 模拟战斗 (简化版)
-        # 战斗成功率 = 50% + (玩家等级 - 推荐等级) * 5%
-        success_chance = 0.5 + (user.level - dungeon.recommended_level) * 0.05
-        # 确保概率在 10% 到 90% 之间
-        success_chance = max(0.1, min(success_chance, 0.9)) 
+    def execute_battle(self, user_id: str, dungeon_id: int, general_instance_ids: List[int]) -> str:
+        """
+        执行战斗逻辑。
+        """
+        dungeon = self.dungeon_repo.get_dungeon_by_id(dungeon_id)
+        if not dungeon:
+            return f"未找到ID为 {dungeon_id} 的副本。"
 
-        if random.random() < success_chance:
-            # 挑战成功
+        user = self.user_repo.get_by_id(user_id)
+        if not user:
+            return "未找到玩家信息。"
+
+        if not general_instance_ids:
+            return "请至少选择一名武将出战。"
+
+        # 获取玩家选择的武将的详细信息
+        selected_generals_details = self.general_repo.get_user_generals_with_details_by_instance_ids(user_id, general_instance_ids)
+
+        if len(selected_generals_details) != len(general_instance_ids):
+            return "选择的武将中包含无效或不属于你的武将ID。"
+
+        # 验证武将等级和计算总战力
+        player_combat_power = 0
+        general_names = []
+        for g in selected_generals_details:
+            if g.level < dungeon.recommended_level:
+                return f"武将 {g.name} (Lv.{g.level}) 未达到副本推荐等级 {dungeon.recommended_level}。"
+            player_combat_power += g.combat_power
+            general_names.append(g.name)
+
+        # --- 敌人战力计算 (优化版) ---
+        # 采用非线性成长模型，避免后期数值爆炸
+        # 基础战力 = 100 * (1.15 ^ (推荐等级 - 1))
+        # 这个公式确保了早期增长平缓，后期增长加速，但仍在控制范围内
+        base_power = 100 * (1.15 ** (dungeon.recommended_level - 1))
+        
+        # 敌人总战力 = 基础战力 * 强度系数
+        enemy_combat_power = base_power * random.uniform(dungeon.enemy_strength_min, dungeon.enemy_strength_max)
+        # --- 敌人战力计算结束 ---
+
+        # 判定胜负
+        total_power = player_combat_power + enemy_combat_power
+        win_chance = player_combat_power / total_power if total_power > 0 else 0
+        
+        # 战斗描述
+        narrative = f"你率领着 {'、'.join(general_names)} (总战力: {player_combat_power:.0f}) 挑战【{dungeon.name}】。\n"
+        narrative += f"遭遇了强大的敌人 (战力: {enemy_combat_power:.0f})！\n"
+        
+        if random.random() < win_chance:
+            # 胜利
             rewards = dungeon.rewards
-            user.exp += rewards.get("exp", 0)
-            user.coins += rewards.get("coins", 0)
-            user.reputation += rewards.get("reputation", 0)
+            coin_reward = rewards.get("coins", 0)
+            yuanbao_reward = rewards.get("yuanbao", 0)
+            user_exp_reward = rewards.get("user_exp", 0)
+            general_exp_reward = rewards.get("general_exp", 0)
+
+            user.coins += coin_reward
+            user.yuanbao += yuanbao_reward
+            user.exp += user_exp_reward
+            
+            # 分配武将经验
+            exp_per_general = 0
+            if general_exp_reward > 0 and selected_generals_details:
+                exp_per_general = general_exp_reward // len(selected_generals_details)
+                for g in selected_generals_details:
+                    self.general_repo.add_exp_to_general(g.instance_id, exp_per_general)
+
             self.user_repo.update(user)
 
-            reward_messages = []
-            if rewards.get("exp"): reward_messages.append(f"{rewards['exp']} 经验")
-            if rewards.get("coins"): reward_messages.append(f"{rewards['coins']} 铜钱")
-            if rewards.get("reputation"): reward_messages.append(f"{rewards['reputation']} 声望")
+            narrative += "⚔️ 激战过后，你取得了胜利！ 🎉\n\n"
+            narrative += f"【奖励结算】\n"
+            if coin_reward: narrative += f"💰 铜钱: +{coin_reward}\n"
+            if yuanbao_reward: narrative += f"💎 元宝: +{yuanbao_reward}\n"
+            if user_exp_reward: narrative += f"📈 玩家经验: +{user_exp_reward}\n"
+            if general_exp_reward: narrative += f"⭐ 武将经验: +{general_exp_reward} (每位出战武将 +{exp_per_general})\n"
             
-            message = f"🎉 恭喜！您成功挑战了【{dungeon.name}】！\n"
-            message += f"获得了奖励: {', '.join(reward_messages)}。"
-            return message
+            return narrative.strip()
         else:
-            # 挑战失败
-            message = f"很遗憾，您在挑战【{dungeon.name}】时失败了..."
-            # 失败也可能有少量安慰奖，或者没有，这里简化为没有
-            return message
+            # 失败
+            narrative += "一番苦战，不幸落败... 💔\n"
+            narrative += "请提升实力后再次挑战！"
+            return narrative.strip()

@@ -20,42 +20,62 @@ class DungeonRepository:
         """获取所有副本信息"""
         with self._create_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT id, name, description, recommended_level, entry_fee, rewards FROM dungeons ORDER BY recommended_level")
+            cursor.execute("SELECT id, name, description, recommended_level, enemy_strength_min, enemy_strength_max, rewards FROM dungeons ORDER BY recommended_level")
             rows = cursor.fetchall()
             
             dungeons = []
             for row in rows:
-                # The rewards are stored as a JSON string, so we need to parse them.
-                # For simplicity, we'll assume the service layer handles JSON parsing if needed,
-                # or we can do it here. Let's assume the model expects a dict.
                 import json
-                rewards_dict = json.loads(row[5]) if row[5] else {}
+                rewards_dict = json.loads(row[6]) if row[6] else {}
                 dungeons.append(Dungeon(
                     dungeon_id=row[0],
                     name=row[1],
                     description=row[2],
                     recommended_level=row[3],
-                    entry_fee=row[4],
+                    enemy_strength_min=row[4],
+                    enemy_strength_max=row[5],
                     rewards=rewards_dict
                 ))
             return dungeons
 
-    def get_dungeon_by_name(self, name: str) -> Optional[Dungeon]:
-        """根据名称获取单个副本信息"""
+    def get_dungeon_by_id(self, dungeon_id: int) -> Optional[Dungeon]:
+        """根据ID获取单个副本信息"""
         with self._create_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT id, name, description, recommended_level, entry_fee, rewards FROM dungeons WHERE name = ?", (name,))
+            cursor.execute("SELECT id, name, description, recommended_level, enemy_strength_min, enemy_strength_max, rewards FROM dungeons WHERE id = ?", (dungeon_id,))
             row = cursor.fetchone()
             
             if row:
                 import json
-                rewards_dict = json.loads(row[5]) if row[5] else {}
+                rewards_dict = json.loads(row[6]) if row[6] else {}
                 return Dungeon(
                     dungeon_id=row[0],
                     name=row[1],
                     description=row[2],
                     recommended_level=row[3],
-                    entry_fee=row[4],
+                    enemy_strength_min=row[4],
+                    enemy_strength_max=row[5],
+                    rewards=rewards_dict
+                )
+            return None
+
+    def get_dungeon_by_name(self, name: str) -> Optional[Dungeon]:
+        """根据名称获取单个副本信息"""
+        with self._create_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT id, name, description, recommended_level, enemy_strength_min, enemy_strength_max, rewards FROM dungeons WHERE name = ?", (name,))
+            row = cursor.fetchone()
+            
+            if row:
+                import json
+                rewards_dict = json.loads(row[6]) if row[6] else {}
+                return Dungeon(
+                    dungeon_id=row[0],
+                    name=row[1],
+                    description=row[2],
+                    recommended_level=row[3],
+                    enemy_strength_min=row[4],
+                    enemy_strength_max=row[5],
                     rewards=rewards_dict
                 )
             return None

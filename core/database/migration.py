@@ -26,9 +26,18 @@ def _get_applied_migrations(conn):
         """)
         return set()
 
-def run_migrations(db_path: str, migrations_path: str):
-    """运行所有待处理的数据库迁移"""
-    logger.info("正在检查并运行数据库迁移...")
+def run_migrations(db_path: str, migrations_path: str, force: bool = False):
+    """
+    运行所有数据库迁移。
+    :param db_path: 数据库文件路径。
+    :param migrations_path: 迁移脚本所在目录。
+    :param force: 如果为 True，则强制运行所有迁移，无论它们是否已被应用。
+    """
+    if force:
+        logger.info("正在强制执行所有数据库迁移...")
+    else:
+        logger.info("正在检查并运行数据库迁移...")
+        
     conn = sqlite3.connect(db_path)
     applied_migrations = _get_applied_migrations(conn)
     
@@ -36,9 +45,9 @@ def run_migrations(db_path: str, migrations_path: str):
     
     for migration_file in migration_files:
         migration_name = migration_file.split('.')[0]
-        if migration_name not in applied_migrations:
+        
+        if force or migration_name not in applied_migrations:
             try:
-                # 使用 importlib 动态导入迁移模块，以支持数字开头的模块名
                 spec = importlib.util.spec_from_file_location(
                     migration_name, os.path.join(migrations_path, migration_file)
                 )
@@ -49,18 +58,21 @@ def run_migrations(db_path: str, migrations_path: str):
                 with conn:
                     cursor = conn.cursor()
                     
-                    # 执行 upgrade 函数
                     if hasattr(migration_module, 'upgrade'):
                         migration_module.upgrade(cursor)
                     else:
-                        logger.warning(f"迁移 {migration_name} 中未找到 upgrade 函数。")
+                        logger.warning(f"迁移 {migration_name} 中未找到 'upgrade' 函数。")
 
-                    # 记录迁移版本
-                    cursor.execute("INSERT INTO schema_migrations (version) VALUES (?)", (migration_name,))
-                    
-                logger.info(f"成功应用迁移: {migration_name}")
+                    # 使用 INSERT OR IGNORE 避免在强制执行时出错
+                    cursor.execute("INSERT OR IGNORE INTO schema_migrations (version) VALUES (?)", (migration_name,))
+                
+                if migration_name not in applied_migrations:
+                    logger.info(f"成功应用迁移: {migration_name}")
+                elif force:
+                    logger.info(f"已强制重新应用迁移: {migration_name}")
+
             except Exception as e:
-                logger.error(f"应用迁移 {migration_name} 时出错: {e}")
+                logger.error(f"应用迁移 {migration_name} 时出错: {e}", exc_info=True)
                 conn.close()
                 raise
     

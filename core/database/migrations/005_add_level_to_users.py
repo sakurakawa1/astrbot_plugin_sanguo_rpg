@@ -3,12 +3,25 @@
 # @Author  : Cline
 # @File    : 005_add_level_to_users.py
 # @Software: AstrBot
-# @Description: Add level to users table
+# @Description: 为 users 表添加 level 字段
 
-def upgrade(db_conn):
-    db_conn.execute("ALTER TABLE users ADD COLUMN level INTEGER DEFAULT 1")
+def column_exists(cursor, table_name, column_name):
+    """检查表中是否存在指定的列"""
+    cursor.execute(f"PRAGMA table_info({table_name})")
+    columns = [row[1] for row in cursor.fetchall()]
+    return column_name in columns
 
-def downgrade(db_conn):
-    # SQLite doesn't easily support dropping columns.
-    # A more complex migration would be needed to recreate the table without the column.
+def upgrade(cursor):
+    """
+    升级数据库
+    """
+    if not column_exists(cursor, "users", "level"):
+        cursor.execute("ALTER TABLE users ADD COLUMN level INTEGER NOT NULL DEFAULT 1;")
+
+def downgrade(cursor):
+    """
+    降级数据库
+    """
+    # 在此迁移中，我们选择不实现移除 level 列的逻辑，
+    # 因为这通常需要重建表，并且在大多数情况下是不必要的。
     pass

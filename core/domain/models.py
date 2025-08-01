@@ -122,13 +122,20 @@ class UserGeneralDetails:
         return self._calculate_upgraded_stat(self.base_su_du)
 
     def _calculate_upgraded_stat(self, base_stat: int) -> int:
-        """计算单项属性升级后的值"""
-        growth_rate = 0.02
-        total_growth = 0
-        for i in range(1, self.level):
-            random_factor = 1 + (random.random() - 0.5) * 2 * 1.0 # +/- 100%
-            total_growth += base_stat * growth_rate * random_factor
+        """
+        计算单项属性升级后的值 (线性成长模型)。
+        每级提供基础属性 2% 的稳定成长。
+        """
+        # 每级提升基础属性的 2%
+        growth_per_level = base_stat * 0.02
+        # 总成长 = 每级成长 * (当前等级 - 1)
+        total_growth = growth_per_level * (self.level - 1)
         return round(base_stat + total_growth)
+
+    @property
+    def combat_power(self) -> float:
+        """计算战斗力"""
+        return self.wu_li * 1.2 + self.zhi_li * 0.8 + self.tong_shuai * 1.0 + self.su_du * 0.5
 
 class Title:
     """称号信息"""
@@ -153,5 +160,6 @@ class Dungeon:
     name: str
     description: str
     recommended_level: int
-    entry_fee: int
+    enemy_strength_min: float
+    enemy_strength_max: float
     rewards: dict
