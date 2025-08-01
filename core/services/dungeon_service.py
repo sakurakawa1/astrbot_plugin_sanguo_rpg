@@ -55,8 +55,8 @@ class DungeonService:
         for g in eligible_generals:
             message += f"🔹 [ID: {g.instance_id}] {g.name} (Lv.{g.level}, 战力: {g.combat_power:.0f})\n"
         
-        message += f"\n👉 请回复 `/确认出战 {dungeon_id} [武将ID1] [武将ID2]...` 来开始战斗。"
-        return message
+        message += f"\n👉 请回复 `/三国出征 [武将ID1] [武将ID2]...` 来开始战斗。"
+        return message.strip()
 
     def execute_battle(self, user_id: str, dungeon_id: int, general_instance_ids: List[int]) -> str:
         """
@@ -88,14 +88,19 @@ class DungeonService:
             player_combat_power += g.combat_power
             general_names.append(g.name)
 
-        # --- 敌人战力计算 (优化版) ---
-        # 采用非线性成长模型，避免后期数值爆炸
-        # 基础战力 = 100 * (1.15 ^ (推荐等级 - 1))
-        # 这个公式确保了早期增长平缓，后期增长加速，但仍在控制范围内
-        base_power = 100 * (1.15 ** (dungeon.recommended_level - 1))
-        
-        # 敌人总战力 = 基础战力 * 强度系数
-        enemy_combat_power = base_power * random.uniform(dungeon.enemy_strength_min, dungeon.enemy_strength_max)
+        # --- 敌人战力计算 (基于副本强度和玩家平均等级) ---
+        # 1. 计算玩家出战武将的平均等级
+        avg_player_level = sum(g.level for g in selected_generals_details) / len(selected_generals_details) if selected_generals_details else 1
+
+        # 2. 定义一个“标准同级武将”的战斗力基准
+        #    这个基准可以根据游戏平衡进行调整。这里我们简化处理，假设战斗力与等级线性相关。
+        #    例如，一个1级武将标准战力为50，10级为500。
+        base_power_per_level = 50 
+        standard_general_power = base_power_per_level * avg_player_level
+
+        # 3. 根据副本的强度范围，计算敌人总战力
+        strength_multiplier = random.uniform(dungeon.enemy_strength_min, dungeon.enemy_strength_max)
+        enemy_combat_power = standard_general_power * strength_multiplier
         # --- 敌人战力计算结束 ---
 
         # --- 判定胜负 (优化版) ---

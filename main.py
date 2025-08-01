@@ -16,15 +16,21 @@ from astrbot.api.star import Context, Star
 from astrbot.core.star.filter.permission import PermissionType
 
 from astrbot_plugin_sanguo_rpg.core.database.migration import run_migrations
+from astrbot_plugin_sanguo_rpg.core.database.seed_items import seed_items_data
 from astrbot_plugin_sanguo_rpg.core.repositories.sqlite_user_repo import SqliteUserRepository
 from astrbot_plugin_sanguo_rpg.core.repositories.sqlite_general_repo import SqliteGeneralRepository
 from astrbot_plugin_sanguo_rpg.core.repositories.sqlite_user_general_repo import SqliteUserGeneralRepository
 from astrbot_plugin_sanguo_rpg.core.repositories.sqlite_title_repo import SqliteTitleRepository
 from astrbot_plugin_sanguo_rpg.core.repositories.sqlite_dungeon_repo import DungeonRepository
+from astrbot_plugin_sanguo_rpg.core.repositories.sqlite_item_repo import ItemRepository
+from astrbot_plugin_sanguo_rpg.core.repositories.sqlite_inventory_repo import InventoryRepository
+from astrbot_plugin_sanguo_rpg.core.repositories.sqlite_shop_repo import ShopRepository
 from astrbot_plugin_sanguo_rpg.core.services.data_setup_service import DataSetupService
 from astrbot_plugin_sanguo_rpg.core.services.leveling_service import LevelingService
 from astrbot_plugin_sanguo_rpg.core.services.dungeon_service import DungeonService
 from astrbot_plugin_sanguo_rpg.core.services.user_service import UserService
+from astrbot_plugin_sanguo_rpg.core.services.shop_service import ShopService
+from astrbot_plugin_sanguo_rpg.core.services.inventory_service import InventoryService
 from astrbot_plugin_sanguo_rpg.core.adventure_generator import AdventureGenerator
 from astrbot_plugin_sanguo_rpg.draw.help import draw_help_image
 from astrbot_plugin_sanguo_rpg.core.domain.models import User
@@ -39,7 +45,8 @@ class SanGuoRPGPlugin(Star):
         self.game_config = {
             "user": { "initial_coins": 50, "initial_yuanbao": 50 },
             "recruit": { "cost_yuanbao": 50, "cooldown_seconds": 300 },
-            "adventure": { "cost_coins": 20, "cooldown_seconds": 600 }
+            "adventure": { "cost_coins": 20, "cooldown_seconds": 600 },
+            "dungeon": { "cooldown_seconds": 600 }
         }
 
         # --- 2. 数据库和基础数据初始化 (使用绝对路径) ---
@@ -56,6 +63,8 @@ class SanGuoRPGPlugin(Star):
         try:
             run_migrations(self.db_path, self.migrations_path)
             logger.info("数据库迁移检查完成。")
+            # 填充初始数据
+            seed_items_data(self.db_path)
             self._verify_and_heal_db()
 
         except Exception as e:
@@ -67,10 +76,16 @@ class SanGuoRPGPlugin(Star):
         self.user_general_repo = SqliteUserGeneralRepository(self.db_path)
         self.title_repo = SqliteTitleRepository(self.db_path)
         self.dungeon_repo = DungeonRepository(self.db_path)
+        self.item_repo = ItemRepository(self.db_path)
+        self.inventory_repo = InventoryRepository(self.db_path)
+        self.shop_repo = ShopRepository(self.db_path)
+
 
         self.leveling_service = LevelingService(self.user_repo, self.user_general_repo)
         self.dungeon_service = DungeonService(self.dungeon_repo, self.user_repo, self.general_repo)
         self.user_service = UserService(self.user_repo, self.game_config)
+        self.shop_service = ShopService(self.shop_repo, self.user_repo, self.item_repo, self.inventory_repo)
+        self.inventory_service = InventoryService(self.inventory_repo, self.user_repo)
         
         data_setup_service = DataSetupService(self.general_repo, self.db_path)
         data_setup_service.setup_initial_data()
@@ -78,6 +93,8 @@ class SanGuoRPGPlugin(Star):
         # 用于存储冷却时间的字典
         self._recruit_cooldowns = {}
         self._adventure_cooldowns = {}
+        self._dungeon_cooldowns = {}
+        self._battle_states = {}
 
     def _force_migrate(self):
         """
@@ -471,6 +488,20 @@ class SanGuoRPGPlugin(Star):
     async def battle_start(self, event: AstrMessageEvent):
         """发起副本挑战，选择武将"""
         user_id = event.get_sender_id()
+
+        # 检查冷却时间
+        cooldown_key = f"dungeon_{user_id}"
+        current_time = datetime.now()
+        cooldown_seconds = self.game_config.get("dungeon", {}).get("cooldown_seconds", 600)
+
+        if cooldown_key in self._dungeon_cooldowns:
+            last_battle_time = self._dungeon_cooldowns[cooldown_key]
+            time_diff = (current_time - last_battle_time).total_seconds()
+            if time_diff < cooldown_seconds:
+                remaining_time = int(cooldown_seconds - time_diff)
+                yield event.plain_result(f"⚔️ 副本挑战冷却中，还需等待 {remaining_time} 秒。")
+                return
+
         args = event.message_str.split()
         if len(args) < 2 or not args[1].isdigit():
             yield event.plain_result("指令格式错误，请使用：/三国战斗 [副本ID]")
@@ -478,26 +509,68 @@ class SanGuoRPGPlugin(Star):
 
         dungeon_id = int(args[1])
         
+        # 存储战斗状态
+        self._battle_states[user_id] = {"dungeon_id": dungeon_id}
+        
         message = self.dungeon_service.get_eligible_generals_for_dungeon(user_id, dungeon_id)
         yield event.plain_result(message)
 
-    @filter.command("确认出战")
+    @filter.command("三国出征")
     async def battle_execute(self, event: AstrMessageEvent):
         """确认出战武将，执行战斗"""
         user_id = event.get_sender_id()
+        
+        if user_id not in self._battle_states:
+            yield event.plain_result("请先使用 `/三国战斗 [副本ID]` 选择一个副本。")
+            return
+            
+        dungeon_id = self._battle_states[user_id]["dungeon_id"]
+        
         args = event.message_str.split()
-        if len(args) < 3:
-            yield event.plain_result("指令格式错误，请使用：/确认出战 [副本ID] [武将ID1] [武将ID2]...")
+        if len(args) < 2:
+            yield event.plain_result("指令格式错误，请使用：/三国出征 [武将ID1] [武将ID2]...")
             return
 
         try:
-            dungeon_id = int(args[1])
-            general_instance_ids = [int(gid) for gid in args[2:]]
+            general_instance_ids = [int(gid) for gid in args[1:]]
         except ValueError:
-            yield event.plain_result("副本ID和武将ID必须是数字。")
+            yield event.plain_result("武将ID必须是数字。")
             return
         
         message = self.dungeon_service.execute_battle(user_id, dungeon_id, general_instance_ids)
+        
+        # 战斗结束后设置冷却并清除状态
+        cooldown_key = f"dungeon_{user_id}"
+        self._dungeon_cooldowns[cooldown_key] = datetime.now()
+        if user_id in self._battle_states:
+            del self._battle_states[user_id]
+        
+        yield event.plain_result(message)
+
+    @filter.command("三国商店", alias={"商店"})
+    async def show_shop(self, event: AstrMessageEvent):
+        """显示今日商店"""
+        message = self.shop_service.get_shop_display()
+        yield event.plain_result(message)
+
+    @filter.command("三国购买", alias={"购买"})
+    async def purchase_item(self, event: AstrMessageEvent):
+        """从商店购买商品"""
+        user_id = event.get_sender_id()
+        args = event.message_str.split()
+        if len(args) < 2 or not args[1].isdigit():
+            yield event.plain_result("指令格式错误，请使用：/三国购买 [商品ID]")
+            return
+
+        shop_item_id = int(args[1])
+        result = self.shop_service.purchase_item(user_id, shop_item_id)
+        yield event.plain_result(result["message"])
+
+    @filter.command("三国背包", alias={"背包"})
+    async def show_inventory(self, event: AstrMessageEvent):
+        """显示玩家的背包"""
+        user_id = event.get_sender_id()
+        message = self.inventory_service.get_inventory_display(user_id)
         yield event.plain_result(message)
 
     @filter.permission_type(PermissionType.ADMIN)

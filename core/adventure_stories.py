@@ -260,7 +260,7 @@ EVENTS = [
         "tags": ["village", "social"],
         "template": "一位老农焦急地向你求助，说他家的耕牛挣脱了缰绳，跑进了附近的山林，希望你能帮忙找回来。",
         "options": [
-            {"text": "答应帮忙寻找耕牛。", "next_stage": "find_ox_success"},
+            {"text": "答应帮忙寻找耕牛。", "next_stage": "find_ox_start_search"},
             {"text": "表示自己还有要事，爱莫能助。", "next_stage": "generic_end_nothing_happened"},
         ]
     },
@@ -631,12 +631,43 @@ RESOLUTIONS = {
         "rewards": {"coins": 80, "exp": 30},
         "end": True
     },
-    "find_ox_success": {
+
+    # --- 寻找耕牛任务链 (重构) ---
+    "find_ox_start_search": {
+        "type": "choice",
+        "template": "你答应了老农，进入山林开始寻找。林子很大，四周都是茂密的树木，你决定：",
+        "options": [
+            {"text": "仔细观察地面，寻找牛的踪迹。", "next_stage": "find_ox_tracks_choice"},
+            {"text": "凭感觉选一个方向，大声呼喊牛的名字。", "next_stage": "find_ox_shout_fail"},
+        ]
+    },
+    "find_ox_tracks_choice": {
+        "type": "choice",
+        "template": "你非常专业地在泥地上发现了一些凌乱的牛蹄印。你顺着蹄印往前走，来到了一个岔路口。",
+        "options": [
+            {"text": "左边的路通往更深的密林。", "next_stage": "find_ox_deep_woods_fail"},
+            {"text": "右边的路似乎通往一处水源。", "next_stage": "find_ox_at_water_success"},
+        ]
+    },
+    "find_ox_shout_fail": {
         "type": "final",
-        "template": "你在山林里找到了受惊的耕牛，并将其带回给老农。老农感激不尽，送给你一些自家种的粮食和一点心意。",
-        "rewards": {"coins": 20, "items": ["干粮"], "reputation": 1},
+        "template": "你的喊声在林中回荡，但没有得到任何回应。反而，你的声音惊动了一窝野蜂，你被蛰得满头是包，只好狼狈地退出了森林。",
+        "rewards": {"exp": 5, "reputation": -1},
         "end": True
     },
+    "find_ox_deep_woods_fail": {
+        "type": "final",
+        "template": "你选择了通往密林深处的路，结果彻底迷失了方向。在天黑之前，你筋疲力尽地走出了森林，但牛的影子都没看到。你只好回去向老农道歉。",
+        "rewards": {"exp": 10, "reputation": -2},
+        "end": True
+    },
+    "find_ox_at_water_success": {
+        "type": "final",
+        "template": "你顺着通往水源的路走去，果然在一条小溪边找到了正在悠闲喝水的耕牛。你顺利地将它带回给了老农，老农感激不尽，给了你丰厚的报酬。",
+        "rewards": {"coins": 50, "items": ["老农的谢礼"], "reputation": 3, "exp": 20},
+        "end": True
+    },
+
     "storyteller_ask_detail": {
         "type": "final",
         "template": "你打赏了10个铜钱，说书人眉飞色舞地向你透露了那位将领正在招贤纳士的传闻，并告知了具体地点。",

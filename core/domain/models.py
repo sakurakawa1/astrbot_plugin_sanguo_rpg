@@ -163,3 +163,24 @@ class Dungeon:
     enemy_strength_min: float
     enemy_strength_max: float
     rewards: dict
+
+@dataclass
+class Item:
+    """物品模板"""
+    id: int
+    name: str
+    description: str
+    rarity: int
+    price_coins: int
+    price_yuanbao: int
+
+    @classmethod
+    def from_row(cls, row):
+        return cls(
+            id=row['id'],
+            name=row['name'],
+            description=row['description'],
+            rarity=row['rarity'],
+            price_coins=row['price_coins'],
+            price_yuanbao=row['price_yuanbao']
+        )
