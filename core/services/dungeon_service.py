@@ -98,15 +98,25 @@ class DungeonService:
         enemy_combat_power = base_power * random.uniform(dungeon.enemy_strength_min, dungeon.enemy_strength_max)
         # --- 敌人战力计算结束 ---
 
-        # 判定胜负
-        total_power = player_combat_power + enemy_combat_power
-        win_chance = player_combat_power / total_power if total_power > 0 else 0
+        # --- 判定胜负 (优化版) ---
+        # 引入“压制”规则，提升游戏体验
+        win = False
+        if player_combat_power >= enemy_combat_power * 2:
+            win = True # 战力是敌人2倍以上，必定胜利
+        elif enemy_combat_power >= player_combat_power * 2:
+            win = False # 敌人战力是玩家2倍以上，必定失败
+        else:
+            # 差距在2倍以内，按概率计算
+            total_power = player_combat_power + enemy_combat_power
+            win_chance = player_combat_power / total_power if total_power > 0 else 0
+            if random.random() < win_chance:
+                win = True
         
         # 战斗描述
         narrative = f"你率领着 {'、'.join(general_names)} (总战力: {player_combat_power:.0f}) 挑战【{dungeon.name}】。\n"
         narrative += f"遭遇了强大的敌人 (战力: {enemy_combat_power:.0f})！\n"
         
-        if random.random() < win_chance:
+        if win:
             # 胜利
             rewards = dungeon.rewards
             coin_reward = rewards.get("coins", 0)
