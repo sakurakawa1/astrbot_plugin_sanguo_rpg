@@ -31,9 +31,9 @@ class SanGuoRPGPlugin(Star):
 
         # --- 1. 加载配置 ---
         self.game_config = {
-            "user": { "initial_coins": 1000, "initial_yuanbao": 100 },
+            "user": { "initial_coins": 50, "initial_yuanbao": 50 },
             "recruit": { "cost_yuanbao": 50, "cooldown_seconds": 300 },
-            "adventure": { "cost_coins": 50, "cooldown_seconds": 600 }
+            "adventure": { "cost_coins": 20, "cooldown_seconds": 600 }
         }
 
         # --- 2. 数据库和基础数据初始化 ---
@@ -109,14 +109,16 @@ class SanGuoRPGPlugin(Star):
             yield event.plain_result("你今天已经签到过了，明天再来吧！")
             return
             
-        coins_reward = 200
+        coins_reward = 50
+        yuanbao_reward = 50
         exp_reward = 10
         user.coins += coins_reward
+        user.yuanbao += yuanbao_reward
         user.exp += exp_reward
         user.last_signed_in = now
         self.user_repo.update(user)
         
-        yield event.plain_result(f"签到成功！获得 {coins_reward} 铜钱，{exp_reward} 经验。")
+        yield event.plain_result(f"签到成功！获得 {coins_reward} 铜钱，{yuanbao_reward} 元宝，{exp_reward} 经验。")
         
     @filter.command("三国我的信息")
     async def my_info(self, event: AstrMessageEvent):
@@ -241,12 +243,16 @@ class SanGuoRPGPlugin(Star):
 
     @filter.command("三国闯关", alias={"三国冒险", "三国战斗", "三国挑战"})
     async def adventure(self, event: AstrMessageEvent):
-        """闯关冒险"""
+        """开始一次新的闯关冒险"""
         user_id = event.get_sender_id()
         user = self.user_repo.get_by_id(user_id)
 
         if not user:
             yield event.plain_result("您尚未注册，请先使用 /三国注册 命令。")
+            return
+            
+        if user_id in self.adventure_context:
+            yield event.plain_result("您还有一个正在进行的冒险，请先做出选择！\n使用 `/三国选择 [选项编号]` 来继续。")
             return
 
         # 冷却时间检查
@@ -263,18 +269,65 @@ class SanGuoRPGPlugin(Star):
                 return
 
         # 检查并扣除费用
-        cost = self.game_config.get("adventure", {}).get("cost_coins", 50)
+        cost = self.game_config.get("adventure", {}).get("cost_coins", 20)
         if user.coins < cost:
             yield event.plain_result(f"💰 铜钱不足！闯关需要 {cost} 铜钱，您只有 {user.coins}。")
             return
         
         user.coins -= cost
+        self.user_repo.update(user) # 先扣钱
 
-        # --- 核心冒险逻辑 ---
+        # --- 交互式冒险逻辑 ---
         template = random.choice(ADVENTURE_TEMPLATES)
-        option = random.choice(template["options"]) # 随机选择一个选项
+        self.adventure_context[user_id] = template # 存储整个事件模板
         
-        # 总是假定成功并获取奖励
+        options_text = []
+        for i, option in enumerate(template["options"]):
+            options_text.append(f"{i+1}. {option['text']}")
+        
+        message = f"""
+【{template['name']}】
+{template['description']}
+
+请做出您的选择:
+{chr(10).join(options_text)}
+
+使用 `/三国选择 [选项编号]` 来决定您的行动。
+"""
+        # 更新冷却时间
+        self._adventure_cooldowns[cooldown_key] = current_time
+        
+        yield event.plain_result(message.strip())
+
+    @filter.command("三国选择")
+    async def adventure_choice(self, event: AstrMessageEvent):
+        """在闯关冒险中做出选择"""
+        user_id = event.get_sender_id()
+        user = self.user_repo.get_by_id(user_id)
+
+        if not user:
+            yield event.plain_result("您尚未注册，请先使用 /三国注册 命令。")
+            return
+            
+        if user_id not in self.adventure_context:
+            yield event.plain_result("您当前没有正在进行的冒险。请使用 /三国闯关 开始新的冒险。")
+            return
+            
+        choice_text = event.get_plain_text().strip()
+        if not choice_text.isdigit():
+            yield event.plain_result("无效的选项，请输入数字。")
+            return
+            
+        choice_index = int(choice_text) - 1
+        template = self.adventure_context[user_id]
+        
+        if not (0 <= choice_index < len(template["options"])):
+            yield event.plain_result("无效的选项编号。")
+            return
+            
+        option = template["options"][choice_index]
+        
+        # --- 处理结果 ---
         rewards = option.get("rewards", {})
         coins_change = rewards.get("coins", 0)
         exp_gain = rewards.get("exp", 0)
@@ -283,9 +336,8 @@ class SanGuoRPGPlugin(Star):
         user.exp += exp_gain
         
         # 构建结果消息
-        # 结合事件描述和玩家选择的行动
         action_text = option.get("text", "进行了一番探索")
-        result_message = f"【{template['name']}】\n{template['description']}\n主公您选择了“{action_text}”。"
+        result_message = f"【{template['name']}】\n你选择了“{action_text}”。"
 
         if coins_change > 0:
             result_message += f"\n\n💰 您获得了 {coins_change} 铜钱。"
@@ -302,28 +354,28 @@ class SanGuoRPGPlugin(Star):
 
         result_message += f"\n\n当前铜钱: {user.coins}, 当前经验: {user.exp}"
 
-        # 更新数据库和冷却时间
+        # 更新数据库并清除上下文
         self.user_repo.update(user)
-        self._adventure_cooldowns[cooldown_key] = current_time
+        del self.adventure_context[user_id]
         
         yield event.plain_result(result_message)
 
     @filter.command("三国挂机闯关")
     async def auto_adventure(self, event: AstrMessageEvent):
         """自动闯关"""
-        yield event.plain_result("挂机闯关命令测试成功！")
+        yield event.plain_result("该功能正在开发中，敬请期待！")
 
     @filter.permission_type(PermissionType.ADMIN)
     @filter.command("三国管理")
     async def sanguo_admin(self, event: AstrMessageEvent):
         """三国RPG插件管理命令"""
-        plain_text = event.message_str.strip()
+        args_text = event.get_plain_text().strip()
+        parts = args_text.split()
         
         # 增加一个给予玩家资源的子命令
         # 格式: /三国管理 add <resource_type> <amount> <user_id>
         # 例如: /三国管理 add coins 10000 123456789
-        parts = plain_text.split()
-        if len(parts) >= 1 and parts[0] == "add":
+        if len(parts) > 0 and parts[0] == "add":
             if len(parts) != 4:
                 yield event.plain_result("❌ 参数格式错误。\n正确格式: /三国管理 add <resource_type> <amount> <user_id>")
                 return
@@ -358,7 +410,7 @@ class SanGuoRPGPlugin(Star):
             return
 
         # 保留数据库迁移功能
-        if plain_text == "migrate":
+        if args_text == "migrate":
             try:
                 db_path = "data/sanguo_rpg.db"
                 plugin_root_dir = os.path.dirname(__file__)
