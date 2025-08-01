@@ -42,3 +42,33 @@ class UserGeneral:
         self.level = level
         self.exp = exp
         self.created_at = created_at
+
+class UserGeneralDetails:
+    """用于展示的玩家武将详细信息"""
+    def __init__(self,
+                 instance_id: int,
+                 user_id: str,
+                 general_id: int,
+                 level: int,
+                 exp: int,
+                 created_at: datetime.datetime,
+                 name: str,
+                 rarity: int,
+                 camp: str,
+                 wu_li: int,
+                 zhi_li: int,
+                 tong_shuai: int,
+                 su_du: int):
+        self.instance_id = instance_id
+        self.user_id = user_id
+        self.general_id = general_id
+        self.level = level
+        self.exp = exp
+        self.created_at = created_at
+        self.name = name
+        self.rarity = rarity
+        self.camp = camp
+        self.wu_li = wu_li
+        self.zhi_li = zhi_li
+        self.tong_shuai = tong_shuai
+        self.su_du = su_du

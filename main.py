@@ -66,12 +66,18 @@ class SanGuoRPGPlugin(Star):
     @filter.command("三国帮助", alias={"三国菜单"})
     async def sanguo_help(self, event: AstrMessageEvent):
         """显示三国RPG插件帮助信息"""
-        try:
-            image_path = draw_help_image()
-            yield event.image_result(image_path)
-        except Exception as e:
-            logger.error(f"绘制帮助图片时出错: {e}")
-            yield event.plain_result(f"绘制帮助图片时出错: {e}")
+        help_text = """
+        【三国RPG 帮助菜单】
+        /三国注册 - 创建你的角色
+        /三国签到 - 每日领取奖励
+        /三国我的信息 - 查看你的状态
+        /三国招募 - 招募新的武将
+        /三国我的武将 - 查看你拥有的武将
+        /三国闯关 - 开始一次冒险
+        /三国选择 [序号] - 在冒险中做出选择
+        /三国管理 - (管理员)管理插件
+        """
+        yield event.plain_result(help_text.strip())
 
     @filter.command("三国注册")
     async def register_user(self, event: AstrMessageEvent):
@@ -143,35 +149,39 @@ class SanGuoRPGPlugin(Star):
     async def my_generals(self, event: AstrMessageEvent):
         """查看我的武将"""
         user_id = event.get_sender_id()
-        user_generals = self.general_repo.get_user_generals(user_id)
+        # 使用优化后的方法一次性获取所有武将信息
+        detailed_generals = self.general_repo.get_user_generals_with_details(user_id)
         
-        if not user_generals:
+        if not detailed_generals:
             yield event.plain_result("您还没有任何武将，请先进行招募！\n使用 /三国招募 来获取您的第一个武将。")
             return
         
         general_info_list = []
-        for user_general in user_generals:
-            general_template = self.general_repo.get_general_by_id(user_general.general_id)
-            if general_template:
-                level_bonus = (user_general.level - 1) * 0.1
-                wu_li = int(general_template.wu_li * (1 + level_bonus))
-                zhi_li = int(general_template.zhi_li * (1 + level_bonus))
-                tong_shuai = int(general_template.tong_shuai * (1 + level_bonus))
-                su_du = int(general_template.su_du * (1 + level_bonus))
-                
-                rarity_stars = "⭐" * general_template.rarity
-                camp_emoji = {"蜀": "🟢", "魏": "🔵", "吴": "🟡", "群": "🔴"}.get(general_template.camp, "⚪")
-                
-                general_info = f"""
-{camp_emoji} {general_template.name} {rarity_stars}
-等级：{user_general.level} | 经验：{user_general.exp}/100
+        for general in detailed_generals:
+            # 计算等级加成
+            level_bonus = (general.level - 1) * 0.1
+            wu_li = int(general.wu_li * (1 + level_bonus))
+            zhi_li = int(general.zhi_li * (1 + level_bonus))
+            tong_shuai = int(general.tong_shuai * (1 + level_bonus))
+            su_du = int(general.su_du * (1 + level_bonus))
+            
+            rarity_stars = "⭐" * general.rarity
+            camp_emoji = {"蜀": "🟢", "魏": "🔵", "吴": "🟡", "群": "🔴"}.get(general.camp, "⚪")
+            
+            # 获取技能描述 (需要额外查询，但可以接受，因为这是模板信息)
+            # 为了保持简单，我们暂时不显示技能描述，或者可以从detailed_generals中添加
+            # general_template = self.general_repo.get_general_by_id(general.general_id)
+            # skill_desc = general_template.skill_desc if general_template else "无"
+
+            general_info = f"""
+{camp_emoji} {general.name} {rarity_stars}
+等级：{general.level} | 经验：{general.exp}/100
 武力：{wu_li} | 智力：{zhi_li}
 统帅：{tong_shuai} | 速度：{su_du}
-技能：{general_template.skill_desc}
 """
-                general_info_list.append(general_info.strip())
+            general_info_list.append(general_info.strip())
         
-        total_count = len(user_generals)
+        total_count = len(detailed_generals)
         message = f"📜 【我的武将】({total_count}个)\n\n" + "\n\n".join(general_info_list)
         
         yield event.plain_result(message)

@@ -9,7 +9,7 @@ import sqlite3
 import random
 from datetime import datetime
 from typing import List, Optional
-from astrbot_plugin_sanguo_rpg.core.domain.models import General, UserGeneral
+from astrbot_plugin_sanguo_rpg.core.domain.models import General, UserGeneral, UserGeneralDetails
 
 class SqliteGeneralRepository:
     """武将数据仓储 - SQLite实现"""
@@ -103,6 +103,60 @@ class SqliteGeneralRepository:
             user_generals.append(UserGeneral(row[0], row[1], row[2], row[3], row[4], created_at))
         
         return user_generals
+
+    def get_user_generals_with_details(self, user_id: str) -> List[UserGeneralDetails]:
+        """获取玩家拥有的武将（包含详细信息）"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+
+        # 使用JOIN查询合并两个表的数据
+        sql = """
+            SELECT
+                ug.instance_id,
+                ug.user_id,
+                ug.general_id,
+                ug.level,
+                ug.exp,
+                ug.created_at,
+                g.name,
+                g.rarity,
+                g.camp,
+                g.wu_li,
+                g.zhi_li,
+                g.tong_shuai,
+                g.su_du
+            FROM user_generals ug
+            JOIN generals g ON ug.general_id = g.general_id
+            WHERE ug.user_id = ?
+            ORDER BY g.rarity DESC, ug.level DESC, ug.created_at DESC
+        """
+        
+        cursor.execute(sql, (user_id,))
+        rows = cursor.fetchall()
+        conn.close()
+        
+        detailed_generals = []
+        for row in rows:
+            # 将字符串时间转换为datetime对象
+            created_at = datetime.fromisoformat(row[5]) if row[5] else datetime.now()
+            # 实例化新的数据模型
+            detailed_generals.append(UserGeneralDetails(
+                instance_id=row[0],
+                user_id=row[1],
+                general_id=row[2],
+                level=row[3],
+                exp=row[4],
+                created_at=created_at,
+                name=row[6],
+                rarity=row[7],
+                camp=row[8],
+                wu_li=row[9],
+                zhi_li=row[10],
+                tong_shuai=row[11],
+                su_du=row[12]
+            ))
+            
+        return detailed_generals
     
     def add_user_general(self, user_id: str, general_id: int) -> bool:
         """为玩家新增武将"""
