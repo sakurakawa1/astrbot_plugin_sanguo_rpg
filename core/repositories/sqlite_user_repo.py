@@ -21,8 +21,8 @@ class SqliteUserRepository:
         with self._create_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
-                "INSERT INTO users (user_id, nickname, coins, yuanbao, exp, created_at, last_signed_in) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (user.user_id, user.nickname, user.coins, user.yuanbao, user.exp, user.created_at, user.last_signed_in)
+                "INSERT INTO users (user_id, nickname, coins, yuanbao, exp, level, reputation, health, status, created_at, last_signed_in, title) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (user.user_id, user.nickname, user.coins, user.yuanbao, user.exp, user.level, user.reputation, user.health, user.status, user.created_at, user.last_signed_in, user.title)
             )
             conn.commit()
 
@@ -62,6 +62,11 @@ class SqliteUserRepository:
                         coins=row["coins"] if "coins" in row_keys else 0,
                         yuanbao=row["yuanbao"] if "yuanbao" in row_keys else 0,
                         exp=row["exp"] if "exp" in row_keys else 0,
+                        level=row["level"] if "level" in row_keys else 1,
+                        reputation=row["reputation"] if "reputation" in row_keys else 0,
+                        health=row["health"] if "health" in row_keys else 100,
+                        status=row["status"] if "status" in row_keys else "正常",
+                        title=row["title"] if "title" in row_keys else None,
                         created_at=created_at,
                         last_signed_in=last_signed_in
                     )
@@ -74,8 +79,12 @@ class SqliteUserRepository:
             cursor = conn.cursor()
             try:
                 cursor.execute(
-                    "UPDATE users SET nickname = ?, coins = ?, yuanbao = ?, exp = ?, last_signed_in = ? WHERE user_id = ?",
-                    (user.nickname, user.coins, user.yuanbao, getattr(user, 'exp', 0), user.last_signed_in, user.user_id)
+                    """
+                    UPDATE users 
+                    SET nickname = ?, coins = ?, yuanbao = ?, exp = ?, level = ?, reputation = ?, health = ?, status = ?, last_signed_in = ?, title = ?
+                    WHERE user_id = ?
+                    """,
+                    (user.nickname, user.coins, user.yuanbao, user.exp, user.level, user.reputation, user.health, user.status, user.last_signed_in, user.title, user.user_id)
                 )
                 conn.commit()
             except sqlite3.Error as e:

@@ -124,7 +124,8 @@ class SqliteGeneralRepository:
                 g.wu_li,
                 g.zhi_li,
                 g.tong_shuai,
-                g.su_du
+                g.su_du,
+                g.skill_desc
             FROM user_generals ug
             JOIN generals g ON ug.general_id = g.general_id
             WHERE ug.user_id = ?
@@ -153,7 +154,8 @@ class SqliteGeneralRepository:
                 wu_li=row[9],
                 zhi_li=row[10],
                 tong_shuai=row[11],
-                su_du=row[12]
+                su_du=row[12],
+                skill_desc=row[13]
             ))
             
         return detailed_generals
@@ -173,6 +175,19 @@ class SqliteGeneralRepository:
             return True
         except Exception:
             return False
+
+    def check_user_has_general(self, user_id: str, general_id: int) -> bool:
+        """检查玩家是否已拥有特定武将"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        try:
+            cursor.execute(
+                "SELECT 1 FROM user_generals WHERE user_id = ? AND general_id = ?",
+                (user_id, general_id)
+            )
+            return cursor.fetchone() is not None
+        finally:
+            conn.close()
     
     def get_user_general_count(self, user_id: str) -> int:
         """获取玩家武将数量"""
@@ -185,20 +200,39 @@ class SqliteGeneralRepository:
         
         return count
     
-    def get_random_general_by_rarity_pool(self) -> Optional[General]:
-        """根据稀有度概率池随机获取武将"""
+    def get_random_general_by_rarity_pool(self, luck_bonus: float = 0.0) -> Optional[General]:
+        """
+        根据稀有度概率池随机获取武将
+        :param luck_bonus: 幸运加成，一个0到1之间的浮点数，会提升高稀有度的概率
+        """
         all_generals = self.get_all_generals()
         if not all_generals:
             return None
 
-        # 稀有度概率：5星(1%), 4星(9%), 3星(20%), 2星(70%)
-        rarity_pool = [2] * 70 + [3] * 20 + [4] * 9 + [5] * 1
+        # 基础概率
+        base_probs = {1: 0.0, 2: 0.70, 3: 0.20, 4: 0.09, 5: 0.01}
+        
+        # 重新分配概率
+        # 将低稀有度的部分概率按比例加到高稀有度上
+        bonus_to_distribute = base_probs[2] * luck_bonus
+        base_probs[2] -= bonus_to_distribute
+        
+        # 按权重(3:2:1)分配给3,4,5星
+        total_weight = 3 + 2 + 1
+        base_probs[3] += bonus_to_distribute * (3 / total_weight)
+        base_probs[4] += bonus_to_distribute * (2 / total_weight)
+        base_probs[5] += bonus_to_distribute * (1 / total_weight)
+
+        # 构建概率池
+        rarities = list(base_probs.keys())
+        probabilities = list(base_probs.values())
         
         while True:
-            selected_rarity = random.choice(rarity_pool)
+            # 根据新的概率分布选择稀有度
+            selected_rarity = random.choices(rarities, weights=probabilities, k=1)[0]
+            
             generals_in_rarity = [g for g in all_generals if g.rarity == selected_rarity]
             
             if generals_in_rarity:
                 return random.choice(generals_in_rarity)
-            # 如果当前抽到的稀有度在数据库中不存在对应武将，则重新抽取。
-            # 这样可以避免在样本数据不全时（如缺少3星武将）程序出错。
+            # 如果抽到的稀有度没有武将，则重新抽取
