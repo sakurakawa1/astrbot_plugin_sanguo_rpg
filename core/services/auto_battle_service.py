@@ -57,7 +57,7 @@ class AutoBattleService:
         # 检查费用
         cost = self.game_config.get("adventure", {}).get("cost_coins", 20)
         if user.coins < cost:
-            self.general_service.add_battle_log(user.user_id, "自动闯关失败：铜钱不足。")
+            self.general_service.add_battle_log(user_id=user.user_id, log_type="自动闯关", message="自动闯关失败：铜钱不足。")
             return
         
         # 扣除费用
@@ -73,11 +73,11 @@ class AutoBattleService:
             # 如果生成失败，回滚费用
             user.coins += cost
             self.user_service.user_repo.update(user)
-            self.general_service.add_battle_log(user.user_id, "自动闯关失败：无法生成冒险故事。")
+            self.general_service.add_battle_log(user_id=user.user_id, log_type="自动闯关", message="自动闯关失败：无法生成冒险故事。")
             return
 
-        self.general_service.add_battle_log(user.user_id, f"自动闯关开始，花费 {cost} 铜钱。")
-        self.general_service.add_battle_log(user.user_id, f"[自动闯关] {result['text']}")
+        self.general_service.add_battle_log(user_id=user.user_id, log_type="自动闯关", message=f"自动闯关开始，花费 {cost} 铜钱。")
+        self.general_service.add_battle_log(user_id=user.user_id, log_type="自动闯关", message=f"[自动闯关] {result['text']}")
 
         # 循环直到冒险结束
         max_steps = 10 # 防止无限循环
@@ -95,7 +95,7 @@ class AutoBattleService:
             
             # 记录日志
             log_message = f"[自动闯关] {result['text']}"
-            self.general_service.add_battle_log(user.user_id, log_message)
+            self.general_service.add_battle_log(user_id=user.user_id, log_type="自动闯关", message=log_message)
             
             step_count += 1
 
@@ -111,17 +111,17 @@ class AutoBattleService:
         # 获取玩家最强的武将
         generals = self.general_service.general_repo.get_user_generals_with_details(user.user_id)
         if not generals:
-            self.general_service.add_battle_log(user.user_id, "自动副本失败：没有任何武将。")
+            self.general_service.add_battle_log(user_id=user.user_id, log_type="自动副本", message="自动副本失败：没有任何武将。")
             return
 
         dungeon = self.dungeon_service.dungeon_repo.get_by_id(user.auto_dungeon_id)
         if not dungeon:
-            self.general_service.add_battle_log(user.user_id, f"自动副本失败：找不到ID为 {user.auto_dungeon_id} 的副本。")
+            self.general_service.add_battle_log(user_id=user.user_id, log_type="自动副本", message=f"自动副本失败：找不到ID为 {user.auto_dungeon_id} 的副本。")
             return
             
         # 检查等级要求
         if user.level < dungeon.required_level:
-            self.general_service.add_battle_log(user.user_id, f"自动副本【{dungeon.name}】失败：等级不足，需要 {dungeon.required_level} 级。")
+            self.general_service.add_battle_log(user_id=user.user_id, log_type="自动副本", message=f"自动副本【{dungeon.name}】失败：等级不足，需要 {dungeon.required_level} 级。")
             return
 
         # 按战力排序并选择最强的几个
@@ -139,5 +139,5 @@ class AutoBattleService:
         
         # 记录日志
         log_message = f"自动副本【{dungeon.name}】: {result_message}"
-        self.general_service.add_battle_log(user.user_id, log_message)
+        self.general_service.add_battle_log(user_id=user.user_id, log_type="自动副本", message=log_message)
         logger.info(f"用户 {user.nickname} 的自动副本【{dungeon.name}】已完成。")

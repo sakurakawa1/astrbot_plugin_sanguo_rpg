@@ -31,6 +31,12 @@ class GeneralService:
         # 闯关冷却时间缓存
         self._adventure_cooldowns = {}
 
+    def add_battle_log(self, user_id: str, log_type: str, log_details: str):
+        """
+        添加战斗日志，这是一个对 astra_repo 方法的封装，以简化服务层代码。
+        """
+        self.general_repo.add_battle_log(user_id=user_id, log_type=log_type, log_details=log_details)
+
     def set_battle_generals(self, user_id: str, general_instance_ids: List[int]) -> Dict:
         """设置玩家的出战武将"""
         user = self.user_repo.get_by_id(user_id)
@@ -304,52 +310,54 @@ class GeneralService:
                 return {"success": False, "message": "❌ 冒险故事生成失败，费用已退还，请稍后再试。"}
 
         # --- 通用结果处理 ---
-        message = result["text"]
+        response_message = result["text"] # 用于最终返回给用户的完整消息
+        log_message = result["text"]      # 用于记录到数据库的纯事件消息
 
         if not result["is_final"]:
             options_text = [f"{i+1}. {opt}" for i, opt in enumerate(result["options"])]
-            message += "\n\n请做出您的选择:\n" + "\n".join(options_text)
+            response_message += "\n\n请做出您的选择:\n" + "\n".join(options_text)
         else:
+            # 最终事件，进行结算
             rewards = result.get("rewards", {}).copy()
-            # 初始花费已在前面扣除，这里仅用于显示
             cost = self.config.get("adventure", {}).get("cost_coins", 20)
 
             # 1. 应用奖励
             reward_application_result = self.user_service.apply_adventure_rewards(user_id, rewards)
 
-            # 2. 构建结算信息
+            # 2. 构建结算信息块
             settlement_block = self._generate_adventure_settlement(
                 cost=cost,
                 reward_result=reward_application_result
             )
             
-            message += settlement_block
+            # 3. 组合最终返回给用户的消息
+            response_message += settlement_block
 
-            # 3. 获取最终用户状态并附加
+            # 4. 获取最新的用户状态并附加到返回消息中
             final_user = self.user_repo.get_by_id(user_id)
             if final_user:
-                message += f"\n\n【当前状态】\n铜钱: {final_user.coins} | 主公经验: {final_user.lord_exp} | 声望: {final_user.reputation}"
+                response_message += f"\n\n【当前状态】\n铜钱: {final_user.coins} | 主公经验: {final_user.lord_exp} | 声望: {final_user.reputation}"
 
-            # 4. 清理冒险状态
+            # 5. 清理本次冒险的状态
             self.user_service.clear_user_adventure_state(user_id)
             
-            # 5. 记录日志
-            self.user_repo.add_adventure_log(user_id, message)
+            # 6. 记录纯粹的事件日志，不包含结算和状态
+            self.add_battle_log(user_id=user_id, log_type="闯关", log_details=log_message)
 
         return {
             "success": True,
-            "message": message,
+            "message": response_message,
             "requires_follow_up": not result["is_final"]
         }
 
-    def get_daily_adventure_logs(self, user_id: str) -> List[str]:
-        """获取每日闯关日志"""
+    def get_daily_adventure_logs(self, user_id: str) -> List[dict]:
+        """获取每日闯关日志，返回带有时间和内容的字典列表"""
         today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-        logs = self.general_repo.get_battle_logs_since(user_id, today_start)
-        return [log.message for log in logs if "闯关" in log.message]
+        logs = self.general_repo.get_battle_logs_since(user_id, today_start, log_type="闯关")
+        return [{"time": log.created_at, "details": log.log_details} for log in logs]
 
-    def get_daily_dungeon_logs(self, user_id: str) -> List[str]:
-        """获取每日副本日志"""
+    def get_daily_dungeon_logs(self, user_id: str) -> List[dict]:
+        """获取每日副本日志，返回带有时间和内容的字典列表"""
         today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-        logs = self.general_repo.get_battle_logs_since(user_id, today_start)
-        return [log.message for log in logs if "副本" in log.message]
+        logs = self.general_repo.get_battle_logs_since(user_id, today_start, log_type="副本")
+        return [{"time": log.created_at, "details": log.log_details} for log in logs]

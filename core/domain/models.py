@@ -178,11 +178,14 @@ class Title:
 @dataclass
 class BattleLog:
     log_id: int
-    user_id: int
-    generals: str
-    enemy: str
-    result: str
-    timestamp: str
+    user_id: str
+    user_general_instance_id: int
+    enemy_name: str
+    is_win: bool
+    log_details: str
+    rewards: Optional[str] = None
+    created_at: Optional[datetime.datetime] = None
+    log_type: Optional[str] = None
 
 
 @dataclass

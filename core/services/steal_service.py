@@ -1,12 +1,14 @@
 # -*- coding: utf-8 -*-
 import random
 from datetime import datetime, timedelta
-from typing import Dict, Any
+from typing import Dict, Any, TYPE_CHECKING
 
 from ..repositories.sqlite_user_repo import SqliteUserRepository
 from ..repositories.sqlite_inventory_repo import InventoryRepository
 from ..services.inventory_service import InventoryService
 from ..domain.models import User
+if TYPE_CHECKING:
+    from .general_service import GeneralService
 
 
 class StealService:
@@ -15,11 +17,13 @@ class StealService:
         user_repo: SqliteUserRepository,
         inventory_repo: InventoryRepository,
         inventory_service: InventoryService,
+        general_service: "GeneralService",
         game_config: Dict[str, Any]
     ):
         self.user_repo = user_repo
         self.inventory_repo = inventory_repo
         self.inventory_service = inventory_service
+        self.general_service = general_service
         self.game_config = game_config
 
     def attempt_steal(self, thief_id: str, target_id: str) -> Dict[str, Any]:
@@ -86,7 +90,11 @@ class StealService:
                 }
             else:
                 result = self._steal_currency(thief, target)
-
+        
+        # 记录日志
+        log_message = f"对 {target.nickname} {result['message']}"
+        self.general_service.add_battle_log(thief_id, "偷窃", log_message)
+        
         self.user_repo.update(thief)
         return result
 

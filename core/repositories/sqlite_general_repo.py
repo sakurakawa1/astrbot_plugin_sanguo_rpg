@@ -9,7 +9,7 @@ import sqlite3
 import random
 from datetime import datetime
 from typing import List, Optional
-from astrbot_plugin_sanguo_rpg.core.domain.models import General, UserGeneral, UserGeneralDetails
+from astrbot_plugin_sanguo_rpg.core.domain.models import General, UserGeneral, UserGeneralDetails, BattleLog
 
 class SqliteGeneralRepository:
     """武将数据仓储 - SQLite实现"""
@@ -386,3 +386,53 @@ class SqliteGeneralRepository:
             return UserGeneral(row[0], row[1], row[2], row[3], row[4], created_at)
         
         return None
+
+    def add_battle_log(self, user_id: str, log_type: str, log_details: str, user_general_instance_id: int = None, enemy_name: str = None, is_win: bool = None, rewards: str = None):
+        """添加战斗或冒险日志"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        try:
+            cursor.execute(
+                """
+                INSERT INTO battle_logs (user_id, log_type, log_details, user_general_instance_id, enemy_name, is_win, rewards, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (user_id, log_type, log_details, user_general_instance_id, enemy_name, is_win, rewards, datetime.now().isoformat())
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+    def get_battle_logs_since(self, user_id: str, start_time: datetime, log_type: Optional[str] = None) -> List[BattleLog]:
+        """获取指定时间之后的所有战斗日志，可按类型筛选"""
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        try:
+            sql = "SELECT * FROM battle_logs WHERE user_id = ? AND created_at >= ?"
+            params = [user_id, start_time.isoformat()]
+
+            if log_type:
+                sql += " AND log_type = ?"
+                params.append(log_type)
+
+            sql += " ORDER BY created_at DESC"
+            
+            cursor.execute(sql, params)
+            rows = cursor.fetchall()
+            logs = []
+            for row in rows:
+                logs.append(BattleLog(
+                    log_id=row['log_id'],
+                    user_id=row['user_id'],
+                    user_general_instance_id=row['user_general_instance_id'],
+                    enemy_name=row['enemy_name'],
+                    is_win=row['is_win'],
+                    log_details=row['log_details'],
+                    rewards=row['rewards'],
+                    created_at=datetime.fromisoformat(row['created_at']),
+                    log_type=row['log_type']
+                ))
+            return logs
+        finally:
+            conn.close()

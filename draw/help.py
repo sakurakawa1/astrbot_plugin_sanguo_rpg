@@ -5,7 +5,7 @@ from PIL import Image, ImageDraw, ImageFont, ImageFilter
 
 def draw_help_image():
     # 画布尺寸
-    width, height = 800, 2400
+    width, height = 800, 2800
 
     # 1. 创建渐变背景
     def create_vertical_gradient(w, h, top_color, bottom_color):
@@ -173,12 +173,14 @@ def draw_help_image():
         ("/三国我的武将", "查看拥有武将"),
         ("/三国招募", "消耗元宝招募"),
         ("/三国升级武将 [ID]", "提升武将等级"),
+        ("/三国设置出战 [ID...]", "设置出战阵容"),
+        ("/三国装备 [武将ID] [装备ID]", "为武将装备物品"),
+        ("/三国卸下 [武将ID] [装备槽]", "卸下武将装备"),
         ("/三国称号", "查看与兑换称号")
     ]
-    
+
     adventure_cmds = [
-        ("/三国闯关", "开启随机冒险"),
-        ("/三国选择 [选项]", "在冒险中抉择"),
+        ("/三国闯关", "开启冒险\n或在冒险中抉择"),
         ("/副本列表", "查看可挑战副本"),
         ("/三国战斗 [副本ID]", "准备挑战副本"),
         ("/三国出征 [武将ID...]", "派出武将开始战斗")
@@ -193,6 +195,13 @@ def draw_help_image():
         ("/三国偷窃 @玩家", "从其他玩家处偷窃")
     ]
 
+    automation_cmds = [
+        ("/三国自动冒险", "开启/关闭自动冒险"),
+        ("/三国自动副本", "开启/关闭自动副本"),
+        ("/每日闯关记录", "查看今日闯关记录"),
+        ("/每日战斗记录", "查看今日战斗记录")
+    ]
+
 
     # 10. 绘制各个部分 - 调整起始位置给logo留足空间
     y0 = logo_y + logo_size + 30
@@ -200,6 +209,7 @@ def draw_help_image():
     y0 = draw_section("⭐ 武将相关", general_cmds, y0, cols=2)
     y0 = draw_section("⚔️ 冒险与战斗", adventure_cmds, y0, cols=2)
     y0 = draw_section("🛒 商店与背包", shop_cmds, y0, cols=2)
+    y0 = draw_section("⚙️ 自动化与日志", automation_cmds, y0, cols=2)
 
 
     # 添加玩法说明

@@ -97,7 +97,7 @@ class SanGuoRPGPlugin(Star):
         self.user_service = UserService(self.user_repo, self.inventory_service, self.item_repo, self.general_repo, self.game_config)
         self.general_service = GeneralService(self.general_repo, self.user_repo, self.user_service, self.game_config)
         self.leveling_service = LevelingService(self.user_repo, self.general_repo)
-        self.dungeon_service = DungeonService(self.dungeon_repo, self.user_repo, self.general_repo, self.user_service)
+        self.dungeon_service = DungeonService(self.dungeon_repo, self.user_repo, self.general_repo, self.user_service, self.general_service)
         self.shop_service = ShopService(self.shop_repo, self.user_repo, self.item_repo, self.inventory_repo)
         self.auto_battle_service = AutoBattleService(
             self.user_service,
@@ -109,6 +109,7 @@ class SanGuoRPGPlugin(Star):
             self.user_repo,
             self.inventory_repo,
             self.inventory_service,
+            self.general_service,
             self.game_config
         )
         
@@ -411,19 +412,6 @@ class SanGuoRPGPlugin(Star):
         result = self.user_service.set_auto_dungeon(user_id, dungeon_id)
         yield event.plain_result(result["message"])
 
-    @filter.command("三国战斗日志")
-    async def get_battle_logs(self, event: AstrMessageEvent):
-        """查看最新的战斗日志"""
-        user_id = event.get_sender_id()
-        logs = self.general_service.get_battle_logs(user_id, limit=10)
-        if not logs:
-            yield event.plain_result("暂无战斗日志。")
-            return
-        
-        log_messages = [f"[{log.timestamp.strftime('%H:%M')}] {log.message}" for log in logs]
-        message = "【最近10条战斗日志】\n" + "\n".join(log_messages)
-        yield event.plain_result(message)
-
     @filter.command("每日闯关记录")
     async def daily_adventure_logs(self, event: AstrMessageEvent):
         """查看今日的闯关记录"""
@@ -433,7 +421,8 @@ class SanGuoRPGPlugin(Star):
             yield event.plain_result("今日暂无闯关记录。")
             return
         
-        message = "【每日闯关记录】\n" + "\n".join(logs)
+        log_messages = [f"[{log['time'].strftime('%H:%M')}] {log['details']}" for log in logs]
+        message = "【每日闯关记录】\n" + "\n".join(log_messages)
         yield event.plain_result(message)
 
     @filter.command("每日战斗记录")
@@ -445,7 +434,8 @@ class SanGuoRPGPlugin(Star):
             yield event.plain_result("今日暂无副本战斗记录。")
             return
         
-        message = "【每日战斗记录】\n" + "\n".join(logs)
+        log_messages = [f"[{log['time'].strftime('%H:%M')}] {log['details']}" for log in logs]
+        message = "【每日战斗记录】\n" + "\n".join(log_messages)
         yield event.plain_result(message)
 
     @filter.command("副本列表")

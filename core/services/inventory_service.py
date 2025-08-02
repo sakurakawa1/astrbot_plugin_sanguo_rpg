@@ -71,15 +71,59 @@ class InventoryService:
         if not inventory_items:
             return "您的背包空空如也。"
             
-        display_lines = [f"【{user.nickname}的背包】\n"]
+        display_lines = [f"【{user.nickname}的背包】"]
         for inv_item in inventory_items:
+            # 优先显示实例描述，否则显示基础描述
+            description = inv_item.description
+            
             line = (
-                f"物品: {inv_item.name} (ID: {inv_item.item_id}) | 数量: {inv_item.quantity}\n"
-                f"品质: {inv_item.quality} | 效果: {inv_item.description}"
+                f"【{inv_item.name}】(ID: {inv_item.inventory_id}) | 数量: {inv_item.quantity}\n"
+                f"  品质: {inv_item.quality}\n"
+                f"  效果: {description}"
             )
             display_lines.append(line)
             
         return "\n".join(display_lines)
+
+    def _apply_item_effects(self, user: User, effects: dict) -> list:
+        """应用物品效果并返回反馈消息列表"""
+        feedback_messages = []
+        
+        # 资源增益
+        if 'add_coins' in effects:
+            amount = effects['add_coins']
+            user.coins += amount
+            feedback_messages.append(f"获得了 {amount} 铜钱")
+        if 'add_yuanbao' in effects:
+            amount = effects['add_yuanbao']
+            user.yuanbao += amount
+            feedback_messages.append(f"获得了 {amount} 元宝")
+        if 'add_exp' in effects:
+            amount = effects['add_exp']
+            user.exp += amount
+            feedback_messages.append(f"增加了 {amount} 经验")
+        if 'add_reputation' in effects:
+            amount = effects['add_reputation']
+            user.reputation += amount
+            feedback_messages.append(f"增加了 {amount} 声望")
+
+        # 兼容旧的 'use_exp'
+        if 'use_exp' in effects and 'add_exp' not in effects:
+            amount = effects['use_exp']
+            user.exp += amount
+            feedback_messages.append(f"经验增加了 {amount} 点")
+
+        # 恢复类
+        if 'health' in effects:
+            max_health = getattr(user, 'max_health', 100)
+            heal_amount = effects['health']
+            original_health = user.health
+            user.health = min(max_health, user.health + heal_amount)
+            healed = user.health - original_health
+            if healed > 0:
+                feedback_messages.append(f"恢复了 {healed} 点体力")
+        
+        return feedback_messages
 
     def use_item(self, user_id: str, inventory_id: int) -> str:
         """使用背包中的物品"""
@@ -96,32 +140,15 @@ class InventoryService:
 
         effects = inventory_item.effects
         if not effects:
-            return f"使用了【{inventory_item.name}】，但似乎什么也没有发生。"
+            return f"【{inventory_item.name}】似乎没有特殊效果，无法使用。"
 
-        feedback_messages = []
-        
-        # 增益类
-        if 'use_exp' in effects and effects['use_exp'] > 0:
-            user.exp += effects['use_exp']
-            feedback_messages.append(f"经验增加了 {effects['use_exp']} 点")
-        elif 'exp' in effects: # 兼容旧数据
-            user.exp += effects['exp']
-            feedback_messages.append(f"经验增加了 {effects['exp']} 点")
-
-        # 恢复类
-        if 'health' in effects:
-            max_health = getattr(user, 'max_health', 100)
-            heal_amount = effects['health']
-            original_health = user.health
-            user.health = min(max_health, user.health + heal_amount)
-            healed = user.health - original_health
-            if healed > 0:
-                feedback_messages.append(f"恢复了 {healed} 点体力")
+        feedback_messages = self._apply_item_effects(user, effects)
 
         if not feedback_messages:
-            feedback_messages.append("但似乎什么也没有发生")
+            return f"您使用了【{inventory_item.name}】，但似乎什么也没发生。"
 
         self.user_repo.update(user)
-        self.inventory_repo.remove_item_from_inventory(inventory_item.inventory_id)
+        # 从库存中移除一个该物品
+        self.inventory_repo.remove_item_from_inventory(inventory_id=inventory_item.inventory_id)
 
         return f"您使用了【{inventory_item.name}】！\n" + "，".join(feedback_messages) + "。"

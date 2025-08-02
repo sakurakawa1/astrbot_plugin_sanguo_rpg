@@ -62,12 +62,12 @@ class InventoryRepository:
         finally:
             conn.close()
 
-    def remove_item_from_inventory(self, user_id: str, item_id: int, quantity: int = 1) -> bool:
-        """从玩家库存中移除物品"""
+    def remove_item_from_inventory(self, inventory_id: int, quantity: int = 1) -> bool:
+        """通过库存ID从玩家库存中移除物品"""
         conn = self._create_connection()
         c = conn.cursor()
         try:
-            c.execute("SELECT quantity FROM user_inventory WHERE user_id = ? AND item_id = ?", (user_id, item_id))
+            c.execute("SELECT quantity FROM user_inventory WHERE id = ?", (inventory_id,))
             result = c.fetchone()
 
             if not result or result[0] < quantity:
@@ -75,9 +75,9 @@ class InventoryRepository:
 
             new_quantity = result[0] - quantity
             if new_quantity > 0:
-                c.execute("UPDATE user_inventory SET quantity = ? WHERE user_id = ? AND item_id = ?", (new_quantity, user_id, item_id))
+                c.execute("UPDATE user_inventory SET quantity = ? WHERE id = ?", (new_quantity, inventory_id))
             else:
-                c.execute("DELETE FROM user_inventory WHERE user_id = ? AND item_id = ?", (user_id, item_id))
+                c.execute("DELETE FROM user_inventory WHERE id = ?", (inventory_id,))
             
             conn.commit()
             return True
@@ -90,7 +90,7 @@ class InventoryRepository:
         c = conn.cursor()
 
         c.execute('''
-            SELECT ui.id as inventory_id, ui.quantity, i.*
+            SELECT ui.id as inventory_id, ui.quantity, i.*, ui.instance_properties
             FROM user_inventory ui
             JOIN items i ON ui.item_id = i.id
             WHERE ui.user_id = ?
@@ -100,12 +100,20 @@ class InventoryRepository:
         for row in c.fetchall():
             item = self._row_to_item(row)
             if item:
+                instance_properties = {}
+                if row['instance_properties']:
+                    try:
+                        instance_properties = json.loads(row['instance_properties'])
+                    except (json.JSONDecodeError, TypeError):
+                        pass
+                
                 inventory_item = InventoryItem(
                     inventory_id=row['inventory_id'],
                     user_id=user_id,
                     item_id=item.id,
                     quantity=row['quantity'],
-                    item=item
+                    item=item,
+                    instance_properties=instance_properties
                 )
                 inventory_items.append(inventory_item)
             
@@ -136,5 +144,40 @@ class InventoryRepository:
                     item_id=item.id,
                     quantity=row['quantity'],
                     item=item
+                )
+        return None
+
+    def get_item_in_inventory_by_instance_id(self, inventory_id: int) -> Optional[InventoryItem]:
+        """通过库存ID获取单个物品实例"""
+        conn = self._create_connection()
+        c = conn.cursor()
+
+        c.execute('''
+            SELECT ui.id as inventory_id, ui.user_id, ui.quantity, i.*, ui.instance_properties
+            FROM user_inventory ui
+            JOIN items i ON ui.item_id = i.id
+            WHERE ui.id = ?
+        ''', (inventory_id,))
+        
+        row = c.fetchone()
+        conn.close()
+
+        if row:
+            item = self._row_to_item(row)
+            if item:
+                instance_properties = {}
+                if row['instance_properties']:
+                    try:
+                        instance_properties = json.loads(row['instance_properties'])
+                    except (json.JSONDecodeError, TypeError):
+                        pass
+
+                return InventoryItem(
+                    inventory_id=row['inventory_id'],
+                    user_id=row['user_id'],
+                    item_id=item.id,
+                    quantity=row['quantity'],
+                    item=item,
+                    instance_properties=instance_properties
                 )
         return None

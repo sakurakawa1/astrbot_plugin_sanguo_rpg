@@ -14,14 +14,16 @@ from ..repositories.sqlite_general_repo import SqliteGeneralRepository
 from ..domain.models import User, UserGeneralDetails
 if TYPE_CHECKING:
     from .user_service import UserService
+    from .general_service import GeneralService
 
 
 class DungeonService:
-    def __init__(self, dungeon_repo: DungeonRepository, user_repo: SqliteUserRepository, general_repo: SqliteGeneralRepository, user_service: 'UserService'):
+    def __init__(self, dungeon_repo: DungeonRepository, user_repo: SqliteUserRepository, general_repo: SqliteGeneralRepository, user_service: 'UserService', general_service: 'GeneralService'):
         self.dungeon_repo = dungeon_repo
         self.user_repo = user_repo
         self.general_repo = general_repo
         self.user_service = user_service
+        self.general_service = general_service
 
     def list_dungeons(self, user: User) -> str:
         """获取并格式化副本列表"""
@@ -144,6 +146,8 @@ class DungeonService:
         narrative += f"队伍总战力: {player_combat_power:.0f}\n"
         narrative += f"遭遇了强大的敌人 (战力: {enemy_combat_power:.0f})！\n"
         
+        log_message = narrative # 记录战斗过程
+        
         if win:
             # 胜利
             rewards = dungeon.rewards
@@ -182,10 +186,14 @@ class DungeonService:
             
             if level_up_msg:
                 narrative += f"\n{level_up_msg}\n"
-
+            
+            log_message += f"胜利！获得铜钱: {coin_reward}, 元宝: {yuanbao_reward}, 主公经验: {lord_exp_reward}, 武将经验: {general_exp_reward}"
+            self.general_service.add_battle_log(user_id, "副本", log_message)
             return narrative.strip()
         else:
             # 失败
             narrative += "一番苦战，不幸落败... 💔\n"
             narrative += "请提升实力后再次挑战！"
+            log_message += "失败！"
+            self.general_service.add_battle_log(user_id, "副本", log_message)
             return narrative.strip()
