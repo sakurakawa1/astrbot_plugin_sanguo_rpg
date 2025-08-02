@@ -5,7 +5,7 @@
 # @Software: AstrBot
 # @Description: Initial database setup
 
-def upgrade(cursor):
+def up(cursor):
     """
     升级数据库
     """
@@ -47,8 +47,12 @@ def upgrade(cursor):
         );
     """)
 
-def downgrade(cursor):
+def down(cursor):
     """
     降级数据库
     """
-    pass
+    cursor.executescript("""
+        DROP TABLE IF EXISTS user_generals;
+        DROP TABLE IF EXISTS generals;
+        DROP TABLE IF EXISTS users;
+    """)

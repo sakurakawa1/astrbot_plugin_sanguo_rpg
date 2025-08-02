@@ -462,51 +462,51 @@ RESOLUTIONS = {
     "yt_stronghold_sneak_success": {
         "type": "final",
         "template": "你凭借高超的技巧成功潜入据点，摸清了敌人的粮仓位置和首领营帐。你悄然纵火，据点顿时大乱，你趁机安全撤离。你的智谋和胆识获得了极高的评价。",
-        "rewards": {"reputation": 15, "exp": 80, "items": ["黄巾军详细部署图"]},
+        "rewards": {"reputation": 15, "lord_exp": 80, "dynamic_item_count": 1},
         "end": True
     },
     "yt_stronghold_assault_fail": {
         "type": "final",
         "template": "你的鲁莽让你陷入了重围。虽然你奋力拼杀，最终得以逃脱，但也身受重伤，损失惨重。",
-        "rewards": {"exp": 20, "health": -30, "coins": -50},
+        "rewards": {"lord_exp": 20, "health": -30, "coins": -50},
         "end": True
     },
     "yt_stronghold_guide_success": {
         "type": "final",
         "template": "在你的带领下，官军成功突袭了黄巾据点，大获全胜。作为首功之臣，你获得了丰厚的金钱和官职奖赏。",
-        "rewards": {"coins": 400, "reputation": 10, "exp": 60, "items": ["县尉的推荐信"]},
+        "rewards": {"coins": 400, "reputation": 10, "lord_exp": 60, "dynamic_item_count": 1},
         "end": True
     },
     "yt_stronghold_wait_reward": {
         "type": "final",
         "template": "官军根据你的情报成功剿匪，但把大部分功劳归于自己。你只获得了少量奖赏，心中颇为不平。",
-        "rewards": {"coins": 100, "reputation": 2, "exp": 20},
+        "rewards": {"coins": 100, "reputation": 2, "lord_exp": 20},
         "end": True
     },
 
     # --- 新增低等级事件结局 ---
     "kill_scout_success": {
         "type": "final",
-        "template": "你干净利落地解决了黄巾斥候，从他身上搜到了一些铜钱和一张简易的地图。",
-        "rewards": {"coins": 15, "exp": 10, "items": ["黄巾军的简易地图"]},
+        "template": "你干净利落地解决了黄巾斥候，从他身上搜到了一些铜钱和一份军粮。",
+        "rewards": {"coins": 15, "lord_exp": 10, "dynamic_item_count": 1},
         "end": True
     },
     "follow_scout_success": {
         "type": "final",
         "template": "你小心翼翼地尾随斥候，成功找到了黄巾军的一个小型据点。你将此情报报告给了附近的官军。",
-        "rewards": {"reputation": 2, "exp": 15},
+        "rewards": {"reputation": 2, "lord_exp": 15},
         "end": True
     },
     "distract_enemy_success": {
         "type": "final",
         "template": "你成功引开了部分黄巾军，村民趁机从祠堂逃脱。你的智谋为你赢得了声望。",
-        "rewards": {"reputation": 3, "exp": 20},
+        "rewards": {"reputation": 3, "lord_exp": 20},
         "end": True
     },
     "force_rescue_success": {
         "type": "final",
         "template": "你如猛虎下山般冲入敌阵，黄巾军被你的勇武所震慑，一番激战后四散而逃。你成功救出了村民。",
-        "rewards": {"coins": 30, "exp": 25},
+        "rewards": {"coins": 30, "lord_exp": 25},
         "end": True
     },
 
@@ -542,7 +542,7 @@ RESOLUTIONS = {
     "help_soldier_success": {
         "type": "final", 
         "template": "你为士兵包扎了伤口，他感激地告诉你一个秘密藏宝地点作为报答。",
-        "rewards": {"coins": 100, "items": ["藏宝图碎片"]},
+        "rewards": {"coins": 100, "dynamic_item_count": 1},
         "end": True
     },
 
@@ -550,13 +550,13 @@ RESOLUTIONS = {
     "stop_brawl_success": {
         "type": "final",
         "template": "在你的调解下，双方握手言和。酒馆老板为了感谢你免了你的酒钱，还额外送了你一些盘缠。",
-        "rewards": {"coins": 30, "exp": 5},
+        "rewards": {"coins": 30, "lord_exp": 5},
         "end": True
     },
     "watch_brawl_outcome": {
         "type": "final",
         "template": "两个醉汉打得不可开交，一个失手将钱袋丢了出来，正好滚到你的脚边。你悄悄捡了起来。",
-        "rewards": {"coins": 20, "exp": -2}, 
+        "rewards": {"coins": 20, "lord_exp": -2}, 
         "end": True
     },
 
@@ -564,7 +564,7 @@ RESOLUTIONS = {
     "end_ruins_map_get": {
         "type": "final",
         "template": "你收好了这张神秘的地图，虽然现在还看懂，但直觉告诉你它将来必有大用。",
-        "rewards": {"items": ["残破的地图"], "exp": 15},
+        "rewards": {"dynamic_item_count": 1, "lord_exp": 15},
         "end": True
     },
 
@@ -572,7 +572,7 @@ RESOLUTIONS = {
     "scholar_debate_success": {
         "type": "final",
         "template": "你与儒生相谈甚欢，他对你的见识大加赞赏，并赠予你一本他亲手注解的《论语》。",
-        "rewards": {"items": ["《论语》注本"], "exp": 30},
+        "rewards": {"dynamic_item_count": 1, "lord_exp": 30},
         "end": True
     },
 
@@ -588,13 +588,13 @@ RESOLUTIONS = {
     "end_thief_forgive": {
         "type": "final",
         "template": "老板看在你的面子上，原谅了小孩。你帮他付了10铜钱，你的善举让你感到内心充实。",
-        "rewards": {"coins": -10, "exp": 10, "reputation": 2},
+        "rewards": {"coins": -10, "lord_exp": 10, "reputation": 2},
         "end": True
     },
     "end_thief_punish": {
         "type": "final",
         "template": "小孩被老板扭送去了官府，市集恢复了秩序，但你总觉得心里有些不是滋味。",
-        "rewards": {"exp": -5},
+        "rewards": {"lord_exp": -5},
         "end": True
     },
 
@@ -608,7 +608,7 @@ RESOLUTIONS = {
     "guard_argue_fail": {
         "type": "final",
         "template": "你试图与官兵理论，结果被他们以“顶撞公门”为由，强行索要了更多钱财。",
-        "rewards": {"coins": -80, "exp": -5},
+        "rewards": {"coins": -80, "lord_exp": -5},
         "end": True
     },
 
@@ -616,7 +616,7 @@ RESOLUTIONS = {
     "end_join_army_direct": {
         "type": "final",
         "template": "你成功加入了军队，开启了你的军旅生涯。你获得了新兵装备和一些安家费。",
-        "rewards": {"coins": 50, "items": ["新兵套装"], "exp": 20},
+        "rewards": {"coins": 50, "dynamic_item_count": 2, "lord_exp": 20},
         "end": True
     },
     "end_bandit_robbery": {
@@ -628,7 +628,7 @@ RESOLUTIONS = {
     "bandit_fight_outcome": {
         "type": "final",
         "template": "一场恶战后，你成功击退了山贼，还在他们身上找到了一些不义之财。",
-        "rewards": {"coins": 80, "exp": 30},
+        "rewards": {"coins": 80, "lord_exp": 30},
         "end": True
     },
 
@@ -652,38 +652,38 @@ RESOLUTIONS = {
     "find_ox_shout_fail": {
         "type": "final",
         "template": "你的喊声在林中回荡，但没有得到任何回应。反而，你的声音惊动了一窝野蜂，你被蛰得满头是包，只好狼狈地退出了森林。",
-        "rewards": {"exp": 5, "reputation": -1},
+        "rewards": {"lord_exp": 5, "reputation": -1},
         "end": True
     },
     "find_ox_deep_woods_fail": {
         "type": "final",
         "template": "你选择了通往密林深处的路，结果彻底迷失了方向。在天黑之前，你筋疲力尽地走出了森林，但牛的影子都没看到。你只好回去向老农道歉。",
-        "rewards": {"exp": 10, "reputation": -2},
+        "rewards": {"lord_exp": 10, "reputation": -2},
         "end": True
     },
     "find_ox_at_water_success": {
         "type": "final",
         "template": "你顺着通往水源的路走去，果然在一条小溪边找到了正在悠闲喝水的耕牛。你顺利地将它带回给了老农，老农感激不尽，给了你丰厚的报酬。",
-        "rewards": {"coins": 50, "items": ["老农的谢礼"], "reputation": 3, "exp": 20},
+        "rewards": {"coins": 50, "dynamic_item_count": 1, "reputation": 3, "lord_exp": 20},
         "end": True
     },
 
     "storyteller_ask_detail": {
         "type": "final",
         "template": "你打赏了10个铜钱，说书人眉飞色舞地向你透露了那位将领正在招贤纳士的传闻，并告知了具体地点。",
-        "rewards": {"coins": -10, "exp": 5, "items": ["重要情报"]},
+        "rewards": {"coins": -10, "lord_exp": 5, "dynamic_item_count": 1},
         "end": True
     },
     "ruins_ghost_investigate": {
         "type": "final",
         "template": "你壮着胆子走近，发现声音来自一个藏在暗处的女子。她是为了躲避战乱才藏身于此，你安抚了她，并给了她一些干粮。",
-        "rewards": {"exp": 15, "reputation": 3},
+        "rewards": {"lord_exp": 15, "reputation": 3},
         "end": True
     },
     "end_ruins_flee": {
         "type": "final",
         "template": "你被未知的声音吓住，不敢久留，匆忙离开了这片是非之地。",
-        "rewards": {"exp": -3},
+        "rewards": {"lord_exp": -3},
         "end": True
     },
     "help_child_find_parent": {
@@ -695,13 +695,13 @@ RESOLUTIONS = {
     "divination_good_omen": {
         "type": "final",
         "template": "道长为你卜得一上上签，预示你接下来将有贵人相助。你感到信心倍增。",
-        "rewards": {"exp": 25, "reputation": 1},
+        "rewards": {"lord_exp": 25, "reputation": 1},
         "end": True
     },
     "accept_bounty_quest": {
         "type": "final",
         "template": "你揭下了悬赏令，并从官府处获得了“独眼龙”出没的线索。一场新的挑战正在等着你。",
-        "rewards": {"items": ["独眼龙的线索"], "exp": 10},
+        "rewards": {"lord_exp": 10},
         "end": True
     },
 
@@ -715,19 +715,19 @@ RESOLUTIONS = {
     "end_accept_reward": {
         "type": "final",
         "template": "你收下村民的谢礼，在他们的欢送声中离开了村庄。",
-        "rewards": {"coins": 50, "exp": 10},
+        "rewards": {"coins": 50, "lord_exp": 10},
         "end": True
     },
     "end_refuse_reward": {
         "type": "final",
         "template": "你的义举赢得了村民的尊敬，声望得到了提升。",
-        "rewards": {"exp": 20, "reputation": 5},
+        "rewards": {"lord_exp": 20, "reputation": 5},
         "end": True
     },
     "end_join_army_success": {
         "type": "final",
         "template": "你加入了官兵的行列，凭借你的勇武，成功击溃了黄巾主力，获得了丰厚的奖赏。",
-        "rewards": {"coins": 150, "exp": 50},
+        "rewards": {"coins": 150, "lord_exp": 50},
         "end": True
     },
     "end_join_army_fail": {
@@ -739,13 +739,13 @@ RESOLUTIONS = {
     "end_merchant_book": {
         "type": "final",
         "template": "你花50铜钱买下了旧书，翻开一看，竟是一本失传的兵法！你从中领悟良多，经验大增。",
-        "rewards": {"coins": -50, "exp": 50},
+        "rewards": {"coins": -50, "dynamic_item_count": 1},
         "end": True
     },
     "end_merchant_pearl": {
         "type": "final",
         "template": "你花100铜钱买下了宝珠，拿在手里仔细一看，发现只是个玻璃球。你上当了！",
-        "rewards": {"coins": -100},
+        "rewards": {"coins": -100, "item_ids": [26]},
         "end": True
     },
 
@@ -753,31 +753,31 @@ RESOLUTIONS = {
     "relic_weapon_found": {
         "type": "final",
         "template": "你挖开泥土，发现是一柄锈迹斑斑的古剑。擦去锈迹后，仍能感到其不凡的锋芒。",
-        "rewards": {"items": ["生锈的古剑"], "exp": 20},
+        "rewards": {"dynamic_item_count": 1, "lord_exp": 20},
         "end": True
     },
     "ghost_general_challenge": {
         "type": "final",
         "template": "一个半透明的古代将军之魂出现在你面前，他赞许你的勇气，并提出要考验你的武艺。一番切磋后，他将一套枪法传授给了你。",
-        "rewards": {"exp": 50, "items": ["初级枪法心得"]},
+        "rewards": {"lord_exp": 50, "dynamic_item_count": 1},
         "end": True
     },
     "poetry_contest_win": {
         "type": "final",
         "template": "你才思泉涌，吟诵出一首佳作，满堂喝彩。主人大喜，赏赐你百金。",
-        "rewards": {"coins": 100, "reputation": 3, "exp": 15},
+        "rewards": {"coins": 100, "reputation": 3, "lord_exp": 15},
         "end": True
     },
     "plot_foiled_reward": {
         "type": "final",
         "template": "你悄悄将阴谋告知主人，主人早有防备，将刺客一网打尽。为感谢你，主人赠予你一匹良驹。",
-        "rewards": {"items": ["良驹"], "reputation": 5},
+        "rewards": {"dynamic_item_count": 1, "reputation": 5},
         "end": True
     },
     "share_food_reward": {
         "type": "final",
         "template": "你将不多的干粮分给了母子，母亲感激地告诉你，她的丈夫是某位将军的亲兵，并给了你一个信物，让你有困难时可以去找那位将军。",
-        "rewards": {"reputation": 5, "items": ["将军的信物"]},
+        "rewards": {"reputation": 5, "dynamic_item_count": 1},
         "end": True
     },
     "refuse_food_consequence": {
@@ -789,13 +789,13 @@ RESOLUTIONS = {
     "wisdom_test_pass": {
         "type": "final",
         "template": "你成功解答了隐士的难题，他抚须而笑，将一本珍藏的医书赠予了你。",
-        "rewards": {"items": ["青囊书残卷"], "exp": 40},
+        "rewards": {"dynamic_item_count": 1, "lord_exp": 40},
         "end": True
     },
     "strength_test_pass": {
         "type": "final",
         "template": "你展示了过人的武勇，成功完成了考验。隐士点点头，送给你一瓶能强身健体的丹药。",
-        "rewards": {"items": ["淬体丹"], "exp": 20},
+        "rewards": {"dynamic_item_count": 1, "lord_exp": 20},
         "end": True
     },
 
@@ -803,7 +803,7 @@ RESOLUTIONS = {
     "rescue_child_success": {
         "type": "final",
         "template": "你冒着生命危险跳入洪水中，成功救起了孩子。村民们把你当做英雄，村长将传家宝“避水珠”赠予了你。",
-        "rewards": {"items": ["避水珠"], "reputation": 10, "exp": 30},
+        "rewards": {"dynamic_item_count": 1, "reputation": 10, "lord_exp": 30},
         "end": True
     },
     "find_raft_rescue": {
@@ -817,13 +817,13 @@ RESOLUTIONS = {
     "raft_safe_return": {
         "type": "final",
         "template": "你理智地选择将村民送到安全地带。虽然没能救下所有人，但你的义举还是为你赢得了声望。",
-        "rewards": {"reputation": 5, "exp": 20},
+        "rewards": {"reputation": 5, "lord_exp": 20},
         "end": True
     },
     "raft_risk_continue": {
         "type": "final",
         "template": "你的贪心导致木筏在洪水中解体，你和村民们都被卷入急流。一番挣扎后，你侥幸活了下来，但损失惨重。",
-        "rewards": {"coins": -50, "exp": -10, "reputation": -2},
+        "rewards": {"coins": -50, "lord_exp": -10, "reputation": -2},
         "end": True
     },
 
@@ -831,7 +831,7 @@ RESOLUTIONS = {
     "gather_herbs_success": {
         "type": "final",
         "template": "你成功采集到了草药，医者用它制作解药，控制了镇上的疫情。为了感谢你，他将一本珍贵的医书《伤寒杂病论》赠予了你。",
-        "rewards": {"items": ["《伤寒杂病论》"], "reputation": 8, "exp": 40},
+        "rewards": {"dynamic_item_count": 1, "reputation": 8, "lord_exp": 40},
         "end": True
     },
     "refuse_gather_herbs": {
@@ -851,7 +851,7 @@ RESOLUTIONS = {
     "help_white_deer_escape": {
         "type": "final",
         "template": "你制造混乱，白鹿趁机逃入了森林深处。你的善举似乎被某种神秘力量所感知，你感到精力更加充沛了。",
-        "rewards": {"exp": 30, "reputation": 3},
+        "rewards": {"lord_exp": 30, "reputation": 3},
         "end": True
     },
     "negotiate_with_guards": {
@@ -865,7 +865,7 @@ RESOLUTIONS = {
     "negotiate_reputation_check": {
         "type": "final",
         "template": "你晓之以理，动之以情，凭借你的高声望成功说服了校尉。他决定放白鹿一条生路，并对你表示敬佩。",
-        "rewards": {"reputation": 5, "exp": 20},
+        "rewards": {"reputation": 5, "lord_exp": 20},
         "end": True
     },
     "negotiate_bribe_check": {
@@ -887,19 +887,19 @@ RESOLUTIONS = {
     "mine_exit_safely": {
         "type": "final",
         "template": "你觉得此地不宜久留，迅速退出了矿洞。虽然一无所获，但也避免了未知的危险。",
-        "rewards": {"exp": 5},
+        "rewards": {"lord_exp": 5},
         "end": True
     },
     "mine_explain_leave": {
         "type": "final",
         "template": "矿工们半信半疑地警告你不要声张，然后将你赶出了矿洞。",
-        "rewards": {"exp": 10},
+        "rewards": {"lord_exp": 10},
         "end": True
     },
     "mine_fight_miners": {
         "type": "final",
         "template": "你与矿工们发生激战，虽然你成功击败了他们，但也受了不轻的伤。你从他们身上搜刮到了一些稀有的黑铁矿石。",
-        "rewards": {"items": ["黑铁矿石"], "exp": 25, "health": -20},
+        "rewards": {"dynamic_item_count": 1, "lord_exp": 25, "health": -20},
         "end": True
     },
 
@@ -924,13 +924,13 @@ RESOLUTIONS = {
     "tower_fight": {
         "type": "final",
         "template": "你如猛虎下山，冲向盗贼。他们猝不及防，一番打斗后被你尽数制服。你夺回了玉佩，第二天将其归还给了张员外，员外大喜，重赏了你。",
-        "rewards": {"coins": 500, "reputation": 10, "exp": 50},
+        "rewards": {"coins": 500, "reputation": 10, "lord_exp": 50},
         "end": True
     },
     "tower_sneak": {
         "type": "final",
         "template": "你扔出一块石子，成功吸引了他们的注意。趁他们外出查看之际，你闪身而入，迅速拿走了桌上的玉佩，消失在夜色中。第二天你将玉佩归还张员外，他虽不知过程，但仍对你感激不尽。",
-        "rewards": {"coins": 300, "reputation": 5, "exp": 60},
+        "rewards": {"coins": 300, "reputation": 5, "lord_exp": 60},
         "end": True
     },
     "inform_officials": {
@@ -944,13 +944,13 @@ RESOLUTIONS = {
     "officials_persuade": {
         "type": "final",
         "template": "你的言辞恳切，一身正气，捕头最终相信了你，立刻点齐人马前往废塔，成功将盗贼一网打尽。事后，你因举报有功，获得了官府的奖赏。",
-        "rewards": {"coins": 200, "reputation": 8, "exp": 30},
+        "rewards": {"coins": 200, "reputation": 8, "lord_exp": 30},
         "end": True
     },
     "officials_lead": {
         "type": "final",
         "template": "你带领官兵埋伏在废塔周围，待盗贼交易时，一声令下，官兵们一拥而上，将人赃并获。你因协助办案，获得了丰厚的奖赏。",
-        "rewards": {"coins": 250, "reputation": 10, "exp": 40},
+        "rewards": {"coins": 250, "reputation": 10, "lord_exp": 40},
         "end": True
     },
     "inform_zhang": {
@@ -964,7 +964,7 @@ RESOLUTIONS = {
     "zhang_with_help": {
         "type": "final",
         "template": "你带着张员外府上的几名精壮家丁一同前往废塔。人多势众，你们很轻松地就制服了盗贼，夺回了玉佩。张员外兑现承诺，给了你一大笔酬金。",
-        "rewards": {"coins": 600, "reputation": 5, "exp": 40},
+        "rewards": {"coins": 600, "reputation": 5, "lord_exp": 40},
         "end": True
     }
 }

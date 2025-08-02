@@ -6,6 +6,7 @@
 # @Description: 商店相关的数据库操作
 
 import sqlite3
+import random
 from datetime import date
 from typing import List, Optional, Tuple
 
@@ -86,41 +87,44 @@ class ShopRepository:
         finally:
             conn.close()
 
-    def has_refreshed_today(self) -> bool:
-        """检查今天是否已经刷新过商店"""
-        today = date.today().isoformat()
-        conn = self._create_connection()
-        c = conn.cursor()
-        c.execute("SELECT 1 FROM shop_items WHERE date = ?", (today,))
-        result = c.fetchone()
-        conn.close()
-        return result is not None
-
-    def refresh_shop(self, item_ids_with_quantities: List[Tuple[int, int]]):
+    def refresh_shop(self, limit: int = 10):
         """
-        用新的商品列表刷新商店。
-        :param item_ids_with_quantities: 一个元组列表 [(item_id, quantity), ...]
+        刷新当天的商店商品。
+        该方法会清空当天的旧商品，然后从所有物品中随机抽取指定数量的新商品上架。
         """
         today = date.today().isoformat()
         conn = self._create_connection()
         c = conn.cursor()
         try:
-            # 为防止重复执行，可以先删除当天的记录，但更安全的做法是在服务层检查
-            # c.execute("DELETE FROM shop_items WHERE date = ?", (today,))
+            # 1. 清空当天的商店记录
+            c.execute("DELETE FROM shop_items WHERE date = ?", (today,))
+
+            # 2. 从 items 表中随机获取所有可用的 item_id
+            c.execute("SELECT id FROM items")
+            all_item_ids = [row[0] for row in c.fetchall()]
             
+            # 如果物品总数少于限制，则全部上架
+            limit = min(len(all_item_ids), limit)
+            
+            # 3. 随机选择指定数量的商品
+            selected_item_ids = random.sample(all_item_ids, limit)
+
+            # 4. 为选中的商品准备插入数据，随机生成数量
             items_to_insert = [
-                (item_id, quantity, today)
-                for item_id, quantity in item_ids_with_quantities
+                (item_id, random.randint(1, 5), today)
+                for item_id in selected_item_ids
             ]
-            
+
+            # 5. 插入新的商品记录
             c.executemany('''
                 INSERT INTO shop_items (item_id, remaining_quantity, date)
                 VALUES (?, ?, ?)
             ''', items_to_insert)
-            
+
             conn.commit()
         except Exception as e:
             conn.rollback()
+            # 在实际应用中，这里应该记录日志
             raise e
         finally:
             conn.close()

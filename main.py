@@ -9,6 +9,7 @@ import os
 import random
 import sqlite3
 from datetime import datetime, timedelta
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from astrbot.api import logger, AstrBotConfig
 from astrbot.api.event import filter, AstrMessageEvent, MessageEventResult
@@ -31,6 +32,9 @@ from astrbot_plugin_sanguo_rpg.core.services.dungeon_service import DungeonServi
 from astrbot_plugin_sanguo_rpg.core.services.user_service import UserService
 from astrbot_plugin_sanguo_rpg.core.services.shop_service import ShopService
 from astrbot_plugin_sanguo_rpg.core.services.inventory_service import InventoryService
+from astrbot_plugin_sanguo_rpg.core.services.general_service import GeneralService
+from astrbot_plugin_sanguo_rpg.core.services.steal_service import StealService
+from astrbot_plugin_sanguo_rpg.core.services.auto_battle_service import AutoBattleService
 from astrbot_plugin_sanguo_rpg.core.adventure_generator import AdventureGenerator
 from astrbot_plugin_sanguo_rpg.draw.help import draw_help_image
 from astrbot_plugin_sanguo_rpg.core.domain.models import User
@@ -43,10 +47,18 @@ class SanGuoRPGPlugin(Star):
 
         # --- 1. 加载配置 ---
         self.game_config = {
-            "user": { "initial_coins": 50, "initial_yuanbao": 50 },
+            "user": {
+                "initial_coins": 50,
+                "initial_yuanbao": 50,
+                "initial_health": 100,
+                "initial_attack": 10,
+                "initial_defense": 5,
+                "initial_max_health": 100
+            },
             "recruit": { "cost_yuanbao": 50, "cooldown_seconds": 300 },
             "adventure": { "cost_coins": 20, "cooldown_seconds": 600 },
-            "dungeon": { "cooldown_seconds": 600 }
+            "dungeon": { "cooldown_seconds": 600 },
+            "steal": { "cooldown_seconds": 300 }
         }
 
         # --- 2. 数据库和基础数据初始化 (使用绝对路径) ---
@@ -80,15 +92,31 @@ class SanGuoRPGPlugin(Star):
         self.inventory_repo = InventoryRepository(self.db_path)
         self.shop_repo = ShopRepository(self.db_path)
 
-
-        self.leveling_service = LevelingService(self.user_repo, self.user_general_repo)
-        self.dungeon_service = DungeonService(self.dungeon_repo, self.user_repo, self.general_repo)
-        self.user_service = UserService(self.user_repo, self.game_config)
+        # --- 4. 服务实例化 ---
+        self.inventory_service = InventoryService(self.inventory_repo, self.user_repo, self.item_repo, self.general_repo)
+        self.user_service = UserService(self.user_repo, self.inventory_service, self.item_repo, self.general_repo, self.game_config)
+        self.general_service = GeneralService(self.general_repo, self.user_repo, self.user_service, self.game_config)
+        self.leveling_service = LevelingService(self.user_repo, self.general_repo)
+        self.dungeon_service = DungeonService(self.dungeon_repo, self.user_repo, self.general_repo, self.user_service)
         self.shop_service = ShopService(self.shop_repo, self.user_repo, self.item_repo, self.inventory_repo)
-        self.inventory_service = InventoryService(self.inventory_repo, self.user_repo)
+        self.auto_battle_service = AutoBattleService(
+            self.user_service,
+            self.dungeon_service,
+            self.general_service,
+            self.game_config
+        )
+        self.steal_service = StealService(
+            self.user_repo,
+            self.inventory_repo,
+            self.inventory_service,
+            self.game_config
+        )
         
         data_setup_service = DataSetupService(self.general_repo, self.db_path)
         data_setup_service.setup_initial_data()
+        
+        # 用于存储冷却时间的字典
+        self._recruit_cooldowns = {}
         
         # 用于存储冷却时间的字典
         self._recruit_cooldowns = {}
@@ -141,6 +169,19 @@ class SanGuoRPGPlugin(Star):
 
 
 
+    async def on_load(self):
+        """插件加载时执行，启动调度器"""
+        self.scheduler = AsyncIOScheduler(timezone="Asia/Shanghai")
+        self.scheduler.add_job(self.auto_battle_service.run_auto_battles, 'interval', minutes=30)
+        self.scheduler.start()
+        logger.info("自动战斗调度器已启动，每分钟检查一次。")
+
+    async def on_unload(self):
+        """插件卸载时执行，关闭调度器"""
+        if self.scheduler and self.scheduler.running:
+            self.scheduler.shutdown()
+            logger.info("自动战斗调度器已关闭。")
+
     async def initialize(self):
         """插件异步初始化"""
         # 迁移已在 __init__ 中完成
@@ -180,6 +221,20 @@ class SanGuoRPGPlugin(Star):
         """查看我的信息"""
         user_id = event.get_sender_id()
         result = self.user_service.get_user_info(user_id)
+        
+        # 获取出战武将信息
+        user = self.user_repo.get_by_id(user_id)
+        if user and user.battle_generals:
+            try:
+                import json
+                battle_general_ids = json.loads(user.battle_generals)
+                # 获取武将名字
+                general_names = self.general_repo.get_generals_names_by_instance_ids(battle_general_ids)
+                if general_names:
+                    result["message"] += f"\n\n⚔️ 出战武将: {', '.join(general_names)}"
+            except (json.JSONDecodeError, TypeError):
+                pass # 如果解析失败则不显示
+
         yield event.plain_result(result["message"])
         
     @filter.command("三国我的武将", alias={"三国武将列表", "三国查看武将"})
@@ -212,91 +267,31 @@ class SanGuoRPGPlugin(Star):
         
         yield event.plain_result(message)
 
+    @filter.command("三国设置出战")
+    async def set_battle_generals(self, event: AstrMessageEvent):
+        """设置出战武将"""
+        user_id = event.get_sender_id()
+        args = event.message_str.split()
+        
+        if len(args) < 2:
+            yield event.plain_result("请提供要设置为出战的武将ID，用空格分隔。\n例如：/三国设置出战 1 2 3")
+            return
+
+        try:
+            general_instance_ids = [int(gid) for gid in args[1:]]
+        except ValueError:
+            yield event.plain_result("武将ID必须是数字。")
+            return
+
+        result = self.general_service.set_battle_generals(user_id, general_instance_ids)
+        yield event.plain_result(result["message"])
+
     @filter.command("三国招募", alias={"三国招募武将", "三国抽卡"})
     async def recruit_general(self, event: AstrMessageEvent):
         """招募武将"""
         user_id = event.get_sender_id()
-        user = self.user_repo.get_by_id(user_id)
-        if not user:
-            yield event.plain_result("请先使用 /三国注册 命令注册账户！")
-            return
-        
-        cooldown_key = f"recruit_{user_id}"
-        current_time = datetime.now()
-        
-        if cooldown_key in self._recruit_cooldowns:
-            last_recruit_time = self._recruit_cooldowns[cooldown_key]
-            cooldown_seconds = self.game_config.get("recruit", {}).get("cooldown_seconds", 300)
-            time_diff = (current_time - last_recruit_time).total_seconds()
-            
-            if time_diff < cooldown_seconds:
-                remaining_time = int(cooldown_seconds - time_diff)
-                yield event.plain_result(f"⏰ 招募冷却中，还需等待 {remaining_time} 秒后才能再次招募。")
-                return
-        
-        recruit_cost = self.game_config.get("recruit", {}).get("cost_yuanbao", 50)
-        
-        # --- “望族”技能折扣计算 ---
-        user_generals = self.general_repo.get_user_generals_with_details(user_id)
-        wangzu_count = sum(1 for g in user_generals if "望族" in g.skill_desc)
-        discount_rate = min(wangzu_count * 0.1, 0.2) # 最多20%折扣
-        
-        final_cost = int(recruit_cost * (1 - discount_rate))
-        discount_info = f" (原价: {recruit_cost})" if discount_rate > 0 else ""
-        
-        if user.yuanbao < final_cost:
-            yield event.plain_result(f"💎 元宝不足！招募需要 {final_cost} 元宝{discount_info}，您当前只有 {user.yuanbao} 元宝。")
-            return
-        
-        # --- 声望影响招募 ---
-        reputation_luck_bonus = min(user.reputation / 5000, 0.2) # 每500声望提升10%稀有度概率，最高20%
-        
-        recruited_general = self.general_repo.get_random_general_by_rarity_pool(reputation_luck_bonus)
-        if not recruited_general:
-            yield event.plain_result("❌ 招募系统繁忙，请稍后再试。")
-            return
-
-        # 检查用户是否已拥有该武将
-        if self.general_repo.check_user_has_general(user_id, recruited_general.general_id):
-            # 更新冷却时间，即使招募到重复的武将也进入冷却
-            self._recruit_cooldowns[cooldown_key] = current_time
-            yield event.plain_result(f"您已拥有武将【{recruited_general.name}】，本次招募未消耗元宝，但招募机会已使用，进入冷却。")
-            return
-
-        # 确认不重复后，再扣费和添加
-        user.yuanbao -= final_cost
-        self.user_repo.update(user)
-        
-        success = self.general_repo.add_user_general(user_id, recruited_general.general_id)
-        if not success:
-            # 如果添加失败，需要回滚费用
-            user.yuanbao += recruit_cost
-            self.user_repo.update(user)
-            yield event.plain_result("❌ 数据库繁忙，招募失败，元宝已退还。")
-            return
-        
-        self._recruit_cooldowns[cooldown_key] = current_time
-        
-        rarity_stars = "⭐" * recruited_general.rarity
-        camp_emoji = {"蜀": "🟢", "魏": "🔵", "吴": "🟡", "群": "🔴"}.get(recruited_general.camp, "⚪")
-        
-        if recruited_general.rarity >= 5: effect = "✨🎉 传说降临！🎉✨"
-        elif recruited_general.rarity >= 4: effect = "🌟 稀有出现！🌟"
-        elif recruited_general.rarity >= 3: effect = "💫 精英到来！"
-        else: effect = "⚡ 新的伙伴！"
-        
-        message = f"""
-{effect}
-{camp_emoji} {recruited_general.name} {rarity_stars}
-阵营：{recruited_general.camp}
-武力：{recruited_general.wu_li} | 智力：{recruited_general.zhi_li}
-统帅：{recruited_general.tong_shuai} | 速度：{recruited_general.su_du}
-技能：{recruited_general.skill_desc}
-💰 花费：{final_cost} 元宝{discount_info}
-💎 剩余元宝：{user.yuanbao}
-使用 /三国我的武将 查看所有武将！
-"""
-        yield event.plain_result(message.strip())
+        result = self.general_service.recruit_general(user_id)
+        yield event.plain_result(result["message"])
 
     @filter.command("三国升级武将", alias={"三国武将升级"})
     async def level_up_general(self, event: AstrMessageEvent):
@@ -360,117 +355,98 @@ class SanGuoRPGPlugin(Star):
         else:
             yield event.plain_result("无效的子命令。可用命令: /三国称号列表, /三国称号兑换 [名称]")
 
-    @filter.command("三国闯关", alias={"三国冒险", "三国挑战"})
+    @filter.command("三国闯关", alias={"三国冒险", "三国挑战", "三国选择"})
     async def adventure(self, event: AstrMessageEvent):
-        """开始或继续一次闯关冒险"""
+        """开始或继续一次闯关冒险。使用 /三国闯关 [选项] 来推进。"""
         user_id = event.get_sender_id()
-        user = self.user_repo.get_by_id(user_id)
+        
+        # 从消息中提取选项
+        # 移除命令前缀，例如 "/三国闯关 1" -> "1"
+        command_parts = event.message_str.split(maxsplit=1)
+        args_str = command_parts[1] if len(command_parts) > 1 else ""
 
-        if not user:
-            yield event.plain_result("您尚未注册，请先使用 /三国注册 命令。")
-            return
+        option_index = -1
+        if args_str.strip().isdigit():
+            option_index = int(args_str.strip()) - 1
 
-        # --- 智能路由：如果玩家在冒险中，且命令带有数字，则视为选择 ---
-        args_str = event.message_str.replace("三国闯关", "", 1).strip()
-        if self.user_service.get_user_adventure_state(user_id) and args_str.isdigit():
-            import copy
-            fake_event = copy.copy(event)
-            fake_event.message_str = f"三国选择 {args_str}"
-            async for result in self.adventure_choice(fake_event):
-                yield result
-            return
-
-        # 如果玩家正在冒险中，但没有提供数字，则显示当前状态（已优化，会显示故事上下文）
-        current_state = self.user_service.get_user_adventure_state(user_id)
-        if current_state:
-            # 从状态中获取故事文本和选项
-            story_text = current_state.get("story_text", "你正面临一个抉择...") # 如果没有文本，则使用默认提示
-            options = current_state.get("options", [])
+        # 将所有逻辑委托给 general_service
+        result = self.general_service.adventure(user_id, option_index)
+        
+        message = result["message"]
+        
+        # 如果需要后续操作，添加提示
+        if result.get("requires_follow_up"):
+            message += "\n\n使用 `/三国闯关 [选项编号]` 来决定您的行动。"
             
-            options_text = [f"{i+1}. {opt['text']}" for i, opt in enumerate(options)]
-            
-            message = f"【冒险进行中】\n{story_text}\n\n请做出您的选择:\n" + "\n".join(options_text)
-            message += "\n\n使用 `/三国选择 [选项编号]` 来决定您的行动。"
-            yield event.plain_result(message.strip())
-            return
-
-        # --- 开始新的冒险 ---
-        cooldown_key = f"adventure_{user_id}"
-        current_time = datetime.now()
-        cooldown_seconds = self.game_config.get("adventure", {}).get("cooldown_seconds", 600)
-
-        if cooldown_key in self._adventure_cooldowns:
-            last_adventure_time = self._adventure_cooldowns[cooldown_key]
-            time_diff = (current_time - last_adventure_time).total_seconds()
-            if time_diff < cooldown_seconds:
-                remaining_time = int(cooldown_seconds - time_diff)
-                yield event.plain_result(f"⚔️ 闯关冷却中，还需等待 {remaining_time} 秒。")
-                return
-
-        cost = self.game_config.get("adventure", {}).get("cost_coins", 20)
-        if user.coins < cost:
-            yield event.plain_result(f"💰 铜钱不足！闯关需要 {cost} 铜钱，您只有 {user.coins}。")
-            return
-        
-        user.coins -= cost
-        self.user_repo.update(user) # 先扣费
-        
-        # --- 使用 AdventureGenerator 生成新故事 ---
-        adv_gen = AdventureGenerator(user_id, self.user_service)
-        result = adv_gen.start_adventure()
-
-        if not result or not result.get("text"):
-            # 如果生成失败，需要回滚费用
-            user.coins += cost
-            self.user_repo.update(user)
-            yield event.plain_result("❌ 冒险故事生成失败，费用已退还，请稍后再试。")
-            return
-
-        options_text = [f"{i+1}. {opt}" for i, opt in enumerate(result["options"])]
-        
-        message = f"【新的冒险】\n{result['text']}\n\n请做出您的选择:\n" + "\n".join(options_text)
-        message += "\n\n使用 `/三国选择 [选项编号]` 来决定您的行动。"
-        
-        self._adventure_cooldowns[cooldown_key] = current_time
         yield event.plain_result(message.strip())
 
-    @filter.command("三国选择")
-    async def adventure_choice(self, event: AstrMessageEvent):
-        """在闯关冒险中做出选择"""
+    @filter.command("三国自动冒险")
+    async def toggle_auto_adventure(self, event: AstrMessageEvent):
+        """开启或关闭自动冒险"""
         user_id = event.get_sender_id()
-        
-        if not self.user_service.get_user_adventure_state(user_id):
-            yield event.plain_result("您当前没有正在进行的冒险。请使用 /三国闯关 开始新的冒险。")
+        args = event.message_str.split()
+        if len(args) < 2 or args[1] not in ["开启", "关闭"]:
+            yield event.plain_result("指令格式错误，请使用：/三国自动冒险 [开启/关闭]")
             return
-            
-        choice_text = event.message_str.replace("三国选择", "", 1).strip()
-        if not choice_text.isdigit():
-            yield event.plain_result("无效的选项，请输入数字。")
-            return
-            
-        choice_index = int(choice_text) - 1
         
-        adv_gen = AdventureGenerator(user_id, self.user_service)
-        result = adv_gen.advance_adventure(choice_index) # result is a dict
+        enabled = True if args[1] == "开启" else False
+        result = self.user_service.set_auto_adventure(user_id, enabled)
+        yield event.plain_result(result["message"])
 
-        message = result["text"]
-
-        if not result["is_final"]:
-            options_text = [f"{i+1}. {opt}" for i, opt in enumerate(result["options"])]
-            message += "\n\n请做出您的选择:\n" + "\n".join(options_text)
-            message += "\n\n使用 `/三国选择 [选项编号]` 来决定您的行动。"
+    @filter.command("三国自动副本")
+    async def set_auto_dungeon(self, event: AstrMessageEvent):
+        """设置自动副本"""
+        user_id = event.get_sender_id()
+        args = event.message_str.split()
+        
+        dungeon_id = None
+        if len(args) > 1 and args[1].isdigit():
+            dungeon_id = int(args[1])
+        elif len(args) > 1 and args[1] == "关闭":
+            dungeon_id = None
         else:
-            # 冒险结束，可以显示一下当前状态
-            user = self.user_repo.get_by_id(user_id)
-            if user:
-                 message += f"\n\n当前状态：\n铜钱: {user.coins}, 经验: {user.exp}, 声望: {user.reputation}"
+            yield event.plain_result("指令格式错误，请使用：/三国自动副本 [副本ID] 或 /三国自动副本 关闭")
+            return
 
-        yield event.plain_result(message.strip())
+        result = self.user_service.set_auto_dungeon(user_id, dungeon_id)
+        yield event.plain_result(result["message"])
 
-    @filter.command("三国挂机闯关")
-    async def auto_adventure(self, event: AstrMessageEvent):
-        """自动闯关"""
-        yield event.plain_result("该功能正在开发中，敬请期待！")
+    @filter.command("三国战斗日志")
+    async def get_battle_logs(self, event: AstrMessageEvent):
+        """查看最新的战斗日志"""
+        user_id = event.get_sender_id()
+        logs = self.general_service.get_battle_logs(user_id, limit=10)
+        if not logs:
+            yield event.plain_result("暂无战斗日志。")
+            return
+        
+        log_messages = [f"[{log.timestamp.strftime('%H:%M')}] {log.message}" for log in logs]
+        message = "【最近10条战斗日志】\n" + "\n".join(log_messages)
+        yield event.plain_result(message)
+
+    @filter.command("每日闯关记录")
+    async def daily_adventure_logs(self, event: AstrMessageEvent):
+        """查看今日的闯关记录"""
+        user_id = event.get_sender_id()
+        logs = self.general_service.get_daily_adventure_logs(user_id)
+        if not logs:
+            yield event.plain_result("今日暂无闯关记录。")
+            return
+        
+        message = "【每日闯关记录】\n" + "\n".join(logs)
+        yield event.plain_result(message)
+
+    @filter.command("每日战斗记录")
+    async def daily_dungeon_logs(self, event: AstrMessageEvent):
+        """查看今日的副本战斗记录"""
+        user_id = event.get_sender_id()
+        logs = self.general_service.get_daily_dungeon_logs(user_id)
+        if not logs:
+            yield event.plain_result("今日暂无副本战斗记录。")
+            return
+        
+        message = "【每日战斗记录】\n" + "\n".join(logs)
+        yield event.plain_result(message)
 
     @filter.command("副本列表")
     async def list_dungeons(self, event: AstrMessageEvent):
@@ -572,6 +548,52 @@ class SanGuoRPGPlugin(Star):
         user_id = event.get_sender_id()
         message = self.inventory_service.get_inventory_display(user_id)
         yield event.plain_result(message)
+
+    @filter.command("三国使用", alias={"使用"})
+    async def use_item(self, event: AstrMessageEvent):
+        """使用背包中的物品"""
+        user_id = event.get_sender_id()
+        args = event.message_str.split()
+        if len(args) < 2 or not args[1].isdigit():
+            yield event.plain_result("指令格式错误，请使用：/三国使用 [物品ID]")
+            return
+
+        item_id = int(args[1])
+        message = self.inventory_service.use_item(user_id, item_id)
+        yield event.plain_result(message)
+
+    @filter.command("三国出售", alias={"出售"})
+    async def sell_item(self, event: AstrMessageEvent):
+        """出售背包中的物品"""
+        user_id = event.get_sender_id()
+        args = event.message_str.split()
+        
+        # 格式: /三国出售 [物品ID] [数量]
+        if len(args) < 3 or not args[1].isdigit() or not args[2].isdigit():
+            yield event.plain_result("指令格式错误，请使用：/三国出售 [物品ID] [数量]")
+            return
+
+        item_id = int(args[1])
+        quantity = int(args[2])
+        
+        result = self.shop_service.sell_item(user_id, item_id, quantity)
+        yield event.plain_result(result["message"])
+
+    @filter.command("三国偷窃", alias={"偷窃"})
+    async def steal_from_player(self, event: AstrMessageEvent):
+        """从其他玩家处偷窃"""
+        thief_id = event.get_sender_id()
+        
+        # 检查是否有 at (mention)
+        mentioned_users = event.get_mentioned_user_ids()
+        if not mentioned_users:
+            yield event.plain_result("请 @ 你要偷窃的目标。")
+            return
+            
+        target_id = mentioned_users[0]
+        
+        result = self.steal_service.attempt_steal(thief_id, target_id)
+        yield event.plain_result(result["message"])
 
     @filter.permission_type(PermissionType.ADMIN)
     @filter.command("三国管理")

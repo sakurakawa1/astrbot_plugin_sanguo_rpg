@@ -121,35 +121,13 @@ class AdventureGenerator:
         story_text = self._render_template(resolution["template"])
         
         if resolution.get("type") == "final":
-            # 故事结束
+            # 故事结束，只返回故事文本和奖励数据
             rewards = resolution.get("rewards", {})
-            # 应用奖励
-            self.user_service.apply_adventure_rewards(self.user_id, rewards)
-            
-            # --- 构建奖励描述文本 (优化版) ---
-            cost = self.user_service.game_config.get("adventure", {}).get("cost_coins", 20)
-            coin_reward = rewards.get("coins", 0)
-            net_coins = coin_reward - cost
-
-            reward_texts = [f"🔸 闯关花费: -{cost} 铜钱"]
-            if coin_reward > 0:
-                reward_texts.append(f"💰 铜钱收益: +{coin_reward}")
-            if "exp" in rewards and rewards["exp"] > 0:
-                reward_texts.append(f"📈 经验: +{rewards['exp']}")
-            if "reputation" in rewards and rewards["reputation"] > 0:
-                reward_texts.append(f"🌟 声望: +{rewards['reputation']}")
-            if "items" in rewards and rewards["items"]:
-                reward_texts.append(f"🎁 获得物品: {', '.join(rewards['items'])}")
-            
-            reward_texts.append("="*15)
-            reward_texts.append(f"本次净赚: {net_coins} 铜钱")
-            
-            story_text += "\n--- 结算 ---\n" + "\n".join(reward_texts)
-
             return {
                 "text": story_text,
                 "options": [],
-                "is_final": True
+                "is_final": True,
+                "rewards": rewards  # 将原始奖励数据传回
             }
         
         elif resolution.get("type") == "choice":

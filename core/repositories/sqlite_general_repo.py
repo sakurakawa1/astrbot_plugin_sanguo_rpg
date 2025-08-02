@@ -160,6 +160,51 @@ class SqliteGeneralRepository:
             
         return detailed_generals
 
+    def get_user_generals_by_instance_ids(self, user_id: str, instance_ids: List[int]) -> List[UserGeneral]:
+        """根据实例ID列表获取玩家拥有的武将"""
+        if not instance_ids:
+            return []
+            
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+
+        placeholders = ','.join('?' for _ in instance_ids)
+        sql = f"SELECT instance_id, user_id, general_id, level, exp, created_at FROM user_generals WHERE user_id = ? AND instance_id IN ({placeholders})"
+        
+        params = [user_id] + instance_ids
+        cursor.execute(sql, params)
+        rows = cursor.fetchall()
+        conn.close()
+        
+        user_generals = []
+        for row in rows:
+            created_at = datetime.fromisoformat(row[5]) if row[5] else datetime.now()
+            user_generals.append(UserGeneral(row[0], row[1], row[2], row[3], row[4], created_at))
+        
+        return user_generals
+
+    def get_generals_names_by_instance_ids(self, instance_ids: List[int]) -> List[str]:
+        """根据实例ID列表获取武将名称列表"""
+        if not instance_ids:
+            return []
+
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+
+        placeholders = ','.join('?' for _ in instance_ids)
+        sql = f"""
+            SELECT g.name
+            FROM user_generals ug
+            JOIN generals g ON ug.general_id = g.general_id
+            WHERE ug.instance_id IN ({placeholders})
+        """
+        
+        cursor.execute(sql, instance_ids)
+        rows = cursor.fetchall()
+        conn.close()
+
+        return [row[0] for row in rows]
+
     def get_user_generals_with_details_by_instance_ids(self, user_id: str, instance_ids: List[int]) -> List[UserGeneralDetails]:
         """根据实例ID列表获取玩家拥有的武将（包含详细信息）"""
         if not instance_ids:
@@ -295,3 +340,49 @@ class SqliteGeneralRepository:
             if generals_in_rarity:
                 return random.choice(generals_in_rarity)
             # 如果抽到的稀有度没有武将，则重新抽取
+
+    def get_average_combat_power_for_level(self, level: int) -> float:
+        """
+        计算指定等级下所有武将的理论平均战力。
+        **此逻辑必须与 UserGeneralDetails 中的战力计算保持一致。**
+        """
+        all_generals = self.get_all_generals()
+        if not all_generals:
+            return 100.0 # 返回一个合理的默认值
+
+        total_combat_power = 0
+        for g in all_generals:
+            # 1. 计算等级带来的属性成长 (逻辑复制自 UserGeneralDetails._calculate_upgraded_stat)
+            def _calculate_upgraded_stat(base_stat: int) -> int:
+                growth_per_level = base_stat * 0.02
+                total_growth = growth_per_level * (level - 1)
+                return round(base_stat + total_growth)
+
+            wu_li = _calculate_upgraded_stat(g.wu_li)
+            zhi_li = _calculate_upgraded_stat(g.zhi_li)
+            tong_shuai = _calculate_upgraded_stat(g.tong_shuai)
+            su_du = _calculate_upgraded_stat(g.su_du)
+
+            # 2. 计算战力 (逻辑复制自 UserGeneralDetails.combat_power)
+            combat_power = wu_li * 1.2 + zhi_li * 0.8 + tong_shuai * 1.0 + su_du * 0.5
+            total_combat_power += combat_power
+            
+        return total_combat_power / len(all_generals) if all_generals else 100.0
+
+    def get_highest_level_general_by_user(self, user_id: str) -> Optional[UserGeneral]:
+        """获取用户拥有的最高等级的武将"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        cursor.execute(
+            "SELECT instance_id, user_id, general_id, level, exp, created_at FROM user_generals WHERE user_id = ? ORDER BY level DESC, exp DESC LIMIT 1",
+            (user_id,)
+        )
+        row = cursor.fetchone()
+        conn.close()
+        
+        if row:
+            created_at = datetime.fromisoformat(row[5]) if row[5] else datetime.now()
+            return UserGeneral(row[0], row[1], row[2], row[3], row[4], created_at)
+        
+        return None

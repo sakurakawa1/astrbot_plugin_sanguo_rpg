@@ -11,14 +11,14 @@ def column_exists(cursor, table_name, column_name):
     columns = [row[1] for row in cursor.fetchall()]
     return column_name in columns
 
-def upgrade(cursor):
+def up(cursor):
     """
     升级数据库
     """
     if not column_exists(cursor, "users", "level"):
         cursor.execute("ALTER TABLE users ADD COLUMN level INTEGER NOT NULL DEFAULT 1;")
 
-def downgrade(cursor):
+def down(cursor):
     """
     降级数据库
     """

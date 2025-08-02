@@ -20,20 +20,21 @@ class DungeonRepository:
         """获取所有副本信息"""
         with self._create_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT id, name, description, recommended_level, enemy_strength_min, enemy_strength_max, rewards FROM dungeons ORDER BY recommended_level")
+            cursor.execute("SELECT id, name, description, recommended_level, max_generals, enemy_strength_min, enemy_strength_max, rewards FROM dungeons ORDER BY recommended_level")
             rows = cursor.fetchall()
             
             dungeons = []
             for row in rows:
                 import json
-                rewards_dict = json.loads(row[6]) if row[6] else {}
+                rewards_dict = json.loads(row[7]) if row[7] else {}
                 dungeons.append(Dungeon(
                     dungeon_id=row[0],
                     name=row[1],
                     description=row[2],
                     recommended_level=row[3],
-                    enemy_strength_min=row[4],
-                    enemy_strength_max=row[5],
+                    max_generals=row[4],
+                    enemy_strength_min=row[5],
+                    enemy_strength_max=row[6],
                     rewards=rewards_dict
                 ))
             return dungeons
@@ -42,19 +43,20 @@ class DungeonRepository:
         """根据ID获取单个副本信息"""
         with self._create_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT id, name, description, recommended_level, enemy_strength_min, enemy_strength_max, rewards FROM dungeons WHERE id = ?", (dungeon_id,))
+            cursor.execute("SELECT id, name, description, recommended_level, max_generals, enemy_strength_min, enemy_strength_max, rewards FROM dungeons WHERE id = ?", (dungeon_id,))
             row = cursor.fetchone()
             
             if row:
                 import json
-                rewards_dict = json.loads(row[6]) if row[6] else {}
+                rewards_dict = json.loads(row[7]) if row[7] else {}
                 return Dungeon(
                     dungeon_id=row[0],
                     name=row[1],
                     description=row[2],
                     recommended_level=row[3],
-                    enemy_strength_min=row[4],
-                    enemy_strength_max=row[5],
+                    max_generals=row[4],
+                    enemy_strength_min=row[5],
+                    enemy_strength_max=row[6],
                     rewards=rewards_dict
                 )
             return None
@@ -63,19 +65,20 @@ class DungeonRepository:
         """根据名称获取单个副本信息"""
         with self._create_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT id, name, description, recommended_level, enemy_strength_min, enemy_strength_max, rewards FROM dungeons WHERE name = ?", (name,))
+            cursor.execute("SELECT id, name, description, recommended_level, max_generals, enemy_strength_min, enemy_strength_max, rewards FROM dungeons WHERE name = ?", (name,))
             row = cursor.fetchone()
             
             if row:
                 import json
-                rewards_dict = json.loads(row[6]) if row[6] else {}
+                rewards_dict = json.loads(row[7]) if row[7] else {}
                 return Dungeon(
                     dungeon_id=row[0],
                     name=row[1],
                     description=row[2],
                     recommended_level=row[3],
-                    enemy_strength_min=row[4],
-                    enemy_strength_max=row[5],
+                    max_generals=row[4],
+                    enemy_strength_min=row[5],
+                    enemy_strength_max=row[6],
                     rewards=rewards_dict
                 )
             return None

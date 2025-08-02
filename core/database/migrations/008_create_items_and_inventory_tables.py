@@ -5,11 +5,9 @@
 # @Software: AstrBot
 # @Description: 创建装备和玩家背包表
 
-def upgrade(conn):
-    c = conn.cursor()
-
+def up(cursor):
     # 1. 创建 items 表
-    c.execute('''
+    cursor.execute('''
         CREATE TABLE IF NOT EXISTS items (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL UNIQUE,
@@ -25,7 +23,7 @@ def upgrade(conn):
     ''')
 
     # 2. 创建 user_inventory 表
-    c.execute('''
+    cursor.execute('''
         CREATE TABLE IF NOT EXISTS user_inventory (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id TEXT NOT NULL,
@@ -37,14 +35,10 @@ def upgrade(conn):
     ''')
     
     # 创建索引以提高查询效率
-    c.execute('CREATE INDEX IF NOT EXISTS idx_user_inventory_user_id ON user_inventory (user_id);')
-    c.execute('CREATE INDEX IF NOT EXISTS idx_items_quality ON items (quality);')
-    c.execute('CREATE INDEX IF NOT EXISTS idx_items_type ON items (type);')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_user_inventory_user_id ON user_inventory (user_id);')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_items_quality ON items (quality);')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_items_type ON items (type);')
 
-    conn.commit()
-
-def downgrade(conn):
-    c = conn.cursor()
-    c.execute('DROP TABLE IF EXISTS user_inventory;')
-    c.execute('DROP TABLE IF EXISTS items;')
-    conn.commit()
+def down(cursor):
+    cursor.execute('DROP TABLE IF EXISTS user_inventory;')
+    cursor.execute('DROP TABLE IF EXISTS items;')

@@ -78,7 +78,7 @@ def draw_help_image():
     logo_y = 25
 
     try:
-        logo = Image.open(os.path.join(os.path.dirname(__file__), "resource", "astrbot_logo.jpg"))
+        logo = Image.open(os.path.join(os.path.dirname(__file__), "resource", "logo.png"))
 
         # 将白色背景替换为与画布背景一致的颜色
         logo = replace_white_background(logo, bg_top)
@@ -187,7 +187,10 @@ def draw_help_image():
     shop_cmds = [
         ("/三国商店", "查看当日商店"),
         ("/三国购买 [商品ID]", "购买指定商品"),
-        ("/三国背包", "查看我的物品")
+        ("/三国背包", "查看我的物品"),
+        ("/三国使用 [物品ID]", "使用背包中物品"),
+        ("/三国出售 [物品ID] [数量]", "出售背包中物品"),
+        ("/三国偷窃 @玩家", "从其他玩家处偷窃")
     ]
 
 

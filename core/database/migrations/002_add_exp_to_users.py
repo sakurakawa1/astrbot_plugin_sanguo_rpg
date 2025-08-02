@@ -5,7 +5,7 @@
 # @Software: AstrBot
 # @Description: Add exp column to users table
 
-def upgrade(cursor):
+def up(cursor):
     """
     升级数据库
     """
@@ -15,10 +15,12 @@ def upgrade(cursor):
     if 'exp' not in columns:
         cursor.execute("ALTER TABLE users ADD COLUMN exp INTEGER DEFAULT 0")
 
-def downgrade(cursor):
+def down(cursor):
     """
     降级数据库
     """
-    # SQLite 不支持直接删除列，需要通过创建新表、复制数据、删除旧表、重命名新表的方式实现
-    # 为简化操作，此处仅作示例，实际生产环境请谨慎操作
+    # SQLite doesn't directly support dropping columns in a simple way.
+    # For a real-world scenario, this would involve creating a new table,
+    # copying data, dropping the old table, and renaming the new one.
+    # For this plugin, we'll assume migrations are forward-only during development.
     pass

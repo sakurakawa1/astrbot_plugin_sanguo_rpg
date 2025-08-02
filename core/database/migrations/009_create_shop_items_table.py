@@ -5,10 +5,8 @@
 # @Software: AstrBot
 # @Description: 创建商店商品表
 
-def upgrade(conn):
-    c = conn.cursor()
-
-    c.execute('''
+def up(cursor):
+    cursor.execute('''
         CREATE TABLE IF NOT EXISTS shop_items (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             item_id INTEGER NOT NULL,
@@ -19,11 +17,7 @@ def upgrade(conn):
     ''')
 
     # 创建索引
-    c.execute('CREATE INDEX IF NOT EXISTS idx_shop_items_date ON shop_items (date);')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_shop_items_date ON shop_items (date);')
 
-    conn.commit()
-
-def downgrade(conn):
-    c = conn.cursor()
-    c.execute('DROP TABLE IF EXISTS shop_items;')
-    conn.commit()
+def down(cursor):
+    cursor.execute('DROP TABLE IF EXISTS shop_items;')

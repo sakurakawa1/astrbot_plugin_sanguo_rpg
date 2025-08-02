@@ -5,34 +5,58 @@
 # @Software: AstrBot
 # @Description: 玩家库存相关的数据库操作
 
+import json
 import sqlite3
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
-from astrbot_plugin_sanguo_rpg.core.domain.models import Item
+from astrbot_plugin_sanguo_rpg.core.domain.models import InventoryItem, Item
+
 
 class InventoryRepository:
     def __init__(self, db_path: str):
         self.db_path = db_path
 
     def _create_connection(self):
-        return sqlite3.connect(self.db_path)
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row
+        return conn
+
+    def _row_to_item(self, row: sqlite3.Row) -> Optional[Item]:
+        if not row:
+            return None
+        
+        effects = None
+        if row['effects']:
+            try:
+                effects = json.loads(row['effects'])
+            except (json.JSONDecodeError, TypeError):
+                effects = {}
+        
+        return Item(
+            id=row['id'],
+            name=row['name'],
+            type=row['type'],
+            quality=row['quality'],
+            description=row['description'],
+            effects=effects,
+            is_consumable=bool(row['is_consumable']),
+            base_price_coins=row['base_price_coins'],
+            base_price_yuanbao=row['base_price_yuanbao']
+        )
 
     def add_item_to_inventory(self, user_id: str, item_id: int, quantity: int = 1):
         """向玩家库存中添加物品"""
         conn = self._create_connection()
         c = conn.cursor()
         try:
-            # 检查物品是否已存在
-            c.execute("SELECT quantity FROM inventory WHERE user_id = ? AND item_id = ?", (user_id, item_id))
+            c.execute("SELECT quantity FROM user_inventory WHERE user_id = ? AND item_id = ?", (user_id, item_id))
             result = c.fetchone()
             
             if result:
-                # 更新数量
                 new_quantity = result[0] + quantity
-                c.execute("UPDATE inventory SET quantity = ? WHERE user_id = ? AND item_id = ?", (new_quantity, user_id, item_id))
+                c.execute("UPDATE user_inventory SET quantity = ? WHERE user_id = ? AND item_id = ?", (new_quantity, user_id, item_id))
             else:
-                # 插入新记录
-                c.execute("INSERT INTO inventory (user_id, item_id, quantity) VALUES (?, ?, ?)", (user_id, item_id, quantity))
+                c.execute("INSERT INTO user_inventory (user_id, item_id, quantity) VALUES (?, ?, ?)", (user_id, item_id, quantity))
             
             conn.commit()
         finally:
@@ -43,40 +67,74 @@ class InventoryRepository:
         conn = self._create_connection()
         c = conn.cursor()
         try:
-            c.execute("SELECT quantity FROM inventory WHERE user_id = ? AND item_id = ?", (user_id, item_id))
+            c.execute("SELECT quantity FROM user_inventory WHERE user_id = ? AND item_id = ?", (user_id, item_id))
             result = c.fetchone()
 
             if not result or result[0] < quantity:
-                return False  # 物品不存在或数量不足
+                return False
 
             new_quantity = result[0] - quantity
             if new_quantity > 0:
-                c.execute("UPDATE inventory SET quantity = ? WHERE user_id = ? AND item_id = ?", (new_quantity, user_id, item_id))
+                c.execute("UPDATE user_inventory SET quantity = ? WHERE user_id = ? AND item_id = ?", (new_quantity, user_id, item_id))
             else:
-                c.execute("DELETE FROM inventory WHERE user_id = ? AND item_id = ?", (user_id, item_id))
+                c.execute("DELETE FROM user_inventory WHERE user_id = ? AND item_id = ?", (user_id, item_id))
             
             conn.commit()
             return True
         finally:
             conn.close()
 
-    def get_user_inventory(self, user_id: str) -> List[Tuple[Item, int]]:
+    def get_user_inventory(self, user_id: str) -> List[InventoryItem]:
         """获取玩家的所有物品及其数量"""
         conn = self._create_connection()
-        conn.row_factory = sqlite3.Row
         c = conn.cursor()
 
         c.execute('''
-            SELECT i.*, inv.quantity
-            FROM inventory inv
-            JOIN items i ON inv.item_id = i.id
-            WHERE inv.user_id = ?
+            SELECT ui.id as inventory_id, ui.quantity, i.*
+            FROM user_inventory ui
+            JOIN items i ON ui.item_id = i.id
+            WHERE ui.user_id = ?
         ''', (user_id,))
         
-        items = []
+        inventory_items = []
         for row in c.fetchall():
-            item = Item.from_row(row)
-            items.append((item, row['quantity']))
+            item = self._row_to_item(row)
+            if item:
+                inventory_item = InventoryItem(
+                    inventory_id=row['inventory_id'],
+                    user_id=user_id,
+                    item_id=item.id,
+                    quantity=row['quantity'],
+                    item=item
+                )
+                inventory_items.append(inventory_item)
             
         conn.close()
-        return items
+        return inventory_items
+
+    def get_item_in_inventory(self, user_id: str, item_id: int) -> Optional[InventoryItem]:
+        """获取玩家背包中指定ID的物品"""
+        conn = self._create_connection()
+        c = conn.cursor()
+
+        c.execute('''
+            SELECT ui.id as inventory_id, ui.quantity, i.*
+            FROM user_inventory ui
+            JOIN items i ON ui.item_id = i.id
+            WHERE ui.user_id = ? AND ui.item_id = ?
+        ''', (user_id, item_id))
+        
+        row = c.fetchone()
+        conn.close()
+
+        if row:
+            item = self._row_to_item(row)
+            if item:
+                return InventoryItem(
+                    inventory_id=row['inventory_id'],
+                    user_id=user_id,
+                    item_id=item.id,
+                    quantity=row['quantity'],
+                    item=item
+                )
+        return None

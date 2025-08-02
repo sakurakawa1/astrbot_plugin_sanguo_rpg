@@ -11,7 +11,7 @@ def column_exists(cursor, table_name, column_name):
     columns = [row[1] for row in cursor.fetchall()]
     return column_name in columns
 
-def upgrade(cursor):
+def up(cursor):
     """
     升级数据库
     """
@@ -19,14 +19,15 @@ def upgrade(cursor):
     columns_to_add = {
         "reputation": "INTEGER NOT NULL DEFAULT 0",
         "health": "INTEGER NOT NULL DEFAULT 100",
-        "status": "TEXT NOT NULL DEFAULT '正常'"
+        "status": "TEXT NOT NULL DEFAULT '正常'",
+        "last_adventure_time": "DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP"
     }
 
     for column, definition in columns_to_add.items():
         if not column_exists(cursor, table_name, column):
             cursor.execute(f"ALTER TABLE {table_name} ADD COLUMN {column} {definition};")
 
-def downgrade(cursor):
+def down(cursor):
     """
     降级数据库 (注意: SQLite 不支持直接移除列，这里是象征性的)
     """

@@ -12,13 +12,17 @@ from typing import Dict, List, Optional
 from astrbot_plugin_sanguo_rpg.core.repositories.sqlite_general_repo import SqliteGeneralRepository
 from astrbot_plugin_sanguo_rpg.core.repositories.sqlite_user_repo import SqliteUserRepository
 from astrbot_plugin_sanguo_rpg.core.domain.models import General, UserGeneral
-from astrbot_plugin_sanguo_rpg.core.adventure_templates import ADVENTURE_TEMPLATES
+from astrbot_plugin_sanguo_rpg.core.adventure_generator import AdventureGenerator
+from astrbot_plugin_sanguo_rpg.core.services.user_service import UserService
+
+
 class GeneralService:
     """武将业务服务"""
     
-    def __init__(self, general_repo: SqliteGeneralRepository, user_repo: SqliteUserRepository, config: dict):
+    def __init__(self, general_repo: SqliteGeneralRepository, user_repo: SqliteUserRepository, user_service: UserService, config: dict):
         self.general_repo = general_repo
         self.user_repo = user_repo
+        self.user_service = user_service
         self.config = config
         
         # 招募冷却时间缓存
@@ -26,6 +30,28 @@ class GeneralService:
         
         # 闯关冷却时间缓存
         self._adventure_cooldowns = {}
+
+    def set_battle_generals(self, user_id: str, general_instance_ids: List[int]) -> Dict:
+        """设置玩家的出战武将"""
+        user = self.user_repo.get_by_id(user_id)
+        if not user:
+            return {"success": False, "message": "找不到用户。"}
+
+        # 验证玩家是否拥有这些武将
+        owned_generals = self.general_repo.get_user_generals_by_instance_ids(user_id, general_instance_ids)
+        owned_instance_ids = {g.instance_id for g in owned_generals}
+
+        if len(owned_instance_ids) != len(general_instance_ids):
+            missing_ids = set(general_instance_ids) - owned_instance_ids
+            return {"success": False, "message": f"您不拥有以下武将ID: {', '.join(map(str, missing_ids))}"}
+
+        # 更新用户的出战武将列表
+        import json
+        user.battle_generals = json.dumps(general_instance_ids)
+        self.user_repo.update(user)
+
+        general_names = self.general_repo.get_generals_names_by_instance_ids(general_instance_ids)
+        return {"success": True, "message": f"已成功设置出战武将: {', '.join(general_names)}"}
     
     def get_user_generals_info(self, user_id: str) -> Dict:
         """获取玩家武将信息"""
@@ -106,13 +132,26 @@ class GeneralService:
                 "message": f"💎 元宝不足！招募需要 {recruit_cost} 元宝，您当前只有 {user.yuanbao} 元宝。"
             }
         
-        # 随机获取武将
-        recruited_general = self.general_repo.get_random_general_by_rarity_pool()
+        # 保底系统
+        pity_5_star_trigger = self.config.get("gacha", {}).get("pity_5_star", 80) - 1
+        pity_4_star_trigger = self.config.get("gacha", {}).get("pity_4_star", 10) - 1
+
+        if user.pity_5_star_count >= pity_5_star_trigger:
+            recruited_general = self.general_repo.get_random_general_by_rarity(5)
+        elif user.pity_4_star_count >= pity_4_star_trigger:
+            recruited_general = self.general_repo.get_random_general_by_rarity(4)
+        else:
+            # 随机获取武将
+            recruited_general = self.general_repo.get_random_general_by_rarity_pool()
+
         if not recruited_general:
             return {
                 "success": False,
-                "message": "❌ 招募失败，请稍后再试。"
+                "message": "❌ 招募失败，卡池暂无武将，请联系管理员。"
             }
+        
+        # 更新保底计数
+        self.user_service.update_pity_counters(user_id, recruited_general.rarity)
         
         # 扣除元宝
         new_yuanbao = user.yuanbao - recruit_cost
@@ -167,104 +206,150 @@ class GeneralService:
             "cost": recruit_cost
         }
     
-    def adventure(self, user_id: str, option_index: int = -1, auto: bool = False) -> Dict:
-        """闯关功能"""
+    def _generate_adventure_settlement(self, cost: int, reward_result: dict) -> str:
+        """
+        根据奖励应用结果生成格式化的结算文本。
+        """
+        actual_rewards = reward_result.get("actual_rewards", {})
+        level_up_message = reward_result.get("level_up_message")
+
+        settlement_parts = []
+        
+        # 花费始终显示
+        settlement_parts.append(f"闯关花费: -{cost} 铜钱")
+
+        # 各种奖励
+        coins_reward = actual_rewards.get("coins", 0)
+        if coins_reward > 0:
+            settlement_parts.append(f"获得铜钱: +{coins_reward}")
+
+        lord_exp_reward = actual_rewards.get("lord_exp", 0)
+        if lord_exp_reward > 0:
+            settlement_parts.append(f"主公经验: +{lord_exp_reward}")
+
+        rep_reward = actual_rewards.get("reputation", 0)
+        if rep_reward != 0:
+            settlement_parts.append(f"声望: {rep_reward:^+}")
+
+        if actual_rewards.get("items"):
+            settlement_parts.append(f"获得物品: {', '.join(actual_rewards['items'])}")
+
+        health_change = actual_rewards.get("health", 0)
+        if health_change != 0:
+            settlement_parts.append(f"血量变化: {health_change:^+}")
+
+        # 计算净收益
+        net_gain = coins_reward - cost
+        
+        settlement_block = "\n--- 结算 ---\n"
+        settlement_block += "\n".join(settlement_parts)
+        settlement_block += f"\n===============\n本次净赚: {net_gain} 铜钱"
+
+        if level_up_message:
+            settlement_block += f"\n\n{level_up_message}"
+            
+        return settlement_block
+
+    def adventure(self, user_id: str, option_index: int = -1) -> Dict:
+        """
+        处理单次闯关的完整逻辑，包括开始、进行和结束。
+        - 如果用户在冒险中且提供了选项，则推进冒险。
+        - 如果用户在冒险中但未提供选项，则显示当前状态。
+        - 如果用户不在冒险中，则开始新的冒险（检查冷却和成本）。
+        """
         user = self.user_repo.get_by_id(user_id)
         if not user:
-            return {"success": False, "message": "您尚未注册，请先使用 /注册 命令。"}
+            return {"success": False, "message": "您尚未注册，请先使用 /三国注册 命令。"}
 
-        user_generals = self.general_repo.get_user_generals(user_id)
-        if not user_generals:
-            return {"success": False, "message": "您还没有任何武将，请先进行招募！"}
+        adv_gen = AdventureGenerator(user_id, self.user_service)
+        current_state = self.user_service.get_user_adventure_state(user_id)
 
-        # 检查闯关冷却时间
-        cooldown_key = f"adventure_{user_id}"
-        current_time = datetime.now()
-        
-        if cooldown_key in self._adventure_cooldowns:
-            last_adventure_time = self._adventure_cooldowns[cooldown_key]
-            cooldown_seconds = self.config.get("adventure", {}).get("cooldown_seconds", 600)
-            time_diff = (current_time - last_adventure_time).total_seconds()
-            
-            if time_diff < cooldown_seconds:
-                remaining_time = int(cooldown_seconds - time_diff)
-                minutes = remaining_time // 60
-                seconds = remaining_time % 60
-                return {
-                    "success": False,
-                    "message": f"⏰ 闯关冷却中，还需等待 {minutes}分{seconds}秒后才能再次闯关。"
-                }
-
-        template = random.choice(ADVENTURE_TEMPLATES)
-        
-        if auto:
-            option_index = random.randint(0, len(template['options']) - 1)
-
-        if option_index == -1:
-            options_text = "\n".join([f"{i+1}. {opt['text']}" for i, opt in enumerate(template['options'])])
-            return {
-                "success": True,
-                "message": f"【{template['name']}】\n{template['description']}\n\n请选择：\n{options_text}",
-                "requires_follow_up": True,
-                "adventure_id": template['id']
-            }
-        else:
-            # 处理玩家的选择
-            option = template['options'][option_index]
-            
-            # 获取出战武将
-            active_generals = self.general_repo.get_user_generals(user_id)[:3]
-            
-            # 计算技能加成
-            success_rate_bonus = 0
-            coin_bonus_multiplier = 1.0
-            exp_bonus_multiplier = 1.0
-            
-            for ug in active_generals:
-                g = self.general_repo.get_general_by_id(ug.general_id)
-                if g and g.skill_desc != "无":
-                    # 解析技能描述
-                    bonuses = re.findall(r"(\w+)增加(\d+)%", g.skill_desc)
-                    for bonus_type, bonus_value in bonuses:
-                        if "成功率" in bonus_type:
-                            success_rate_bonus += int(bonus_value) / 100
-                        elif "金币" in bonus_type:
-                            coin_bonus_multiplier += int(bonus_value) / 100
-                        elif "经验" in bonus_type:
-                            exp_bonus_multiplier += int(bonus_value) / 100
-            
-            success_rate = option['success_rate'] + success_rate_bonus
-            success = random.random() < success_rate
-            
-            if success:
-                rewards = option['rewards']
-                coins_reward = int(rewards.get('coins', 0) * coin_bonus_multiplier)
-                exp_reward = int(rewards.get('exp', 0) * exp_bonus_multiplier)
-                
-                user.coins += coins_reward
-                # Assuming user has exp attribute
-                # user.exp += exp_reward
-                self.user_repo.update(user)
-                
-                reward_text = []
-                if coins_reward != 0:
-                    reward_text.append(f"{coins_reward} 铜钱")
-                if exp_reward != 0:
-                    reward_text.append(f"{exp_reward} 经验")
-                
-                self._adventure_cooldowns[cooldown_key] = current_time
-                return {
-                    "success": True,
-                    "message": f"【{template['name']}】\n成功！你获得了 {'、'.join(reward_text)}。"
-                }
+        # 场景1: 玩家在冒险中
+        if current_state:
+            if option_index != -1:
+                result = adv_gen.advance_adventure(option_index)
             else:
-                # 失败惩罚
-                self._adventure_cooldowns[cooldown_key] = current_time + timedelta(minutes=5) # 增加5分钟冷却
-                return {
-                    "success": True,
-                    "message": f"【{template['name']}】\n{option['failure_text']}\n闯关冷却时间增加5分钟。"
-                }
-    
-    def auto_adventure(self, user_id: str) -> Dict:
-        """挂机闯关"""
-        return self.adventure(user_id, auto=True)
+                story_text = current_state.get("story_text", "你正面临一个抉择...")
+                options = current_state.get("options", [])
+                options_text = [f"{i+1}. {opt['text']}" for i, opt in enumerate(options)]
+                message = f"【冒险进行中】\n{story_text}\n\n请做出您的选择:\n" + "\n".join(options_text)
+                return {"success": True, "message": message, "requires_follow_up": True}
+        
+        # 场景2: 玩家不在冒险中，开始新冒险
+        else:
+            cooldown_key = f"adventure_{user_id}"
+            current_time = datetime.now()
+            cooldown_seconds = self.config.get("adventure", {}).get("cooldown_seconds", 600)
+            if cooldown_key in self._adventure_cooldowns:
+                time_diff = (current_time - self._adventure_cooldowns[cooldown_key]).total_seconds()
+                if time_diff < cooldown_seconds:
+                    remaining_time = int(cooldown_seconds - time_diff)
+                    return {"success": False, "message": f"⚔️ 闯关冷却中，还需等待 {remaining_time} 秒。"}
+
+            cost = self.config.get("adventure", {}).get("cost_coins", 20)
+            if user.coins < cost:
+                return {"success": False, "message": f"💰 铜钱不足！闯关需要 {cost} 铜钱，您只有 {user.coins}。"}
+            
+            # 扣费并开始
+            user.coins -= cost
+            self.user_repo.update(user)
+            
+            result = adv_gen.start_adventure()
+            
+            if result and result.get("text"):
+                self._adventure_cooldowns[cooldown_key] = current_time
+            else: # 如果开始失败，回滚费用
+                user.coins += cost
+                self.user_repo.update(user)
+                return {"success": False, "message": "❌ 冒险故事生成失败，费用已退还，请稍后再试。"}
+
+        # --- 通用结果处理 ---
+        message = result["text"]
+
+        if not result["is_final"]:
+            options_text = [f"{i+1}. {opt}" for i, opt in enumerate(result["options"])]
+            message += "\n\n请做出您的选择:\n" + "\n".join(options_text)
+        else:
+            rewards = result.get("rewards", {}).copy()
+            # 初始花费已在前面扣除，这里仅用于显示
+            cost = self.config.get("adventure", {}).get("cost_coins", 20)
+
+            # 1. 应用奖励
+            reward_application_result = self.user_service.apply_adventure_rewards(user_id, rewards)
+
+            # 2. 构建结算信息
+            settlement_block = self._generate_adventure_settlement(
+                cost=cost,
+                reward_result=reward_application_result
+            )
+            
+            message += settlement_block
+
+            # 3. 获取最终用户状态并附加
+            final_user = self.user_repo.get_by_id(user_id)
+            if final_user:
+                message += f"\n\n【当前状态】\n铜钱: {final_user.coins} | 主公经验: {final_user.lord_exp} | 声望: {final_user.reputation}"
+
+            # 4. 清理冒险状态
+            self.user_service.clear_user_adventure_state(user_id)
+            
+            # 5. 记录日志
+            self.user_repo.add_adventure_log(user_id, message)
+
+        return {
+            "success": True,
+            "message": message,
+            "requires_follow_up": not result["is_final"]
+        }
+
+    def get_daily_adventure_logs(self, user_id: str) -> List[str]:
+        """获取每日闯关日志"""
+        today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        logs = self.general_repo.get_battle_logs_since(user_id, today_start)
+        return [log.message for log in logs if "闯关" in log.message]
+
+    def get_daily_dungeon_logs(self, user_id: str) -> List[str]:
+        """获取每日副本日志"""
+        today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        logs = self.general_repo.get_battle_logs_since(user_id, today_start)
+        return [log.message for log in logs if "副本" in log.message]
