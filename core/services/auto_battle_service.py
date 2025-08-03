@@ -10,9 +10,8 @@ import random
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Optional
 
-from astrbot.core.event_bus import event_bus
-from astrbot.core.plugin import IPlugin
-from astrbot.core.channel import QQChannel
+from astrbot.api.star import Star
+from astrbot.core.message import PrivateMessage
 
 if TYPE_CHECKING:
     from astrbot_plugin_sanguo_rpg.core.services.user_service import UserService
@@ -26,7 +25,7 @@ class AutoBattleService:
         user_service: "UserService",
         general_service: "GeneralService",
         dungeon_service: "DungeonService",
-        plugin: IPlugin,
+        plugin: Star,
         game_config: dict,
     ):
         self.user_service = user_service
@@ -34,6 +33,7 @@ class AutoBattleService:
         self.dungeon_service = dungeon_service
         self.plugin = plugin
         self.game_config = game_config
+        self.event_bus = plugin.context.event_bus
         self._task: Optional[asyncio.Task] = None
         self.is_running = False
 
@@ -94,8 +94,9 @@ class AutoBattleService:
             # 发送最终结果通知
             if result.get("success"):
                 message = f"【自动冒险】\n{result['message']}"
-                channel = QQChannel(user_id=user.user_id)
-                await event_bus.publish("send_message", channel=channel, message=message)
+                await self.event_bus.publish(
+                    "send_private_message", user_id=user.user_id, message=message
+                )
             else:
                 # 可以在这里处理失败的情况，例如记录日志
                 print(f"用户 {user.nickname} 的自动冒险失败: {result.get('message')}")
