@@ -6,6 +6,7 @@
 # @Description: 用户数据仓储实现
 
 import sqlite3
+import asyncio
 from datetime import datetime
 from typing import Optional, List
 from astrbot_plugin_sanguo_rpg.core.domain.models import User
@@ -97,7 +98,12 @@ class SqliteUserRepository:
             cursor.execute("UPDATE users SET auto_dungeon_id = ? WHERE user_id = ?", (dungeon_id, user_id))
             conn.commit()
 
-    def get_all_users_with_auto_battle(self) -> List[User]:
+    async def get_all_users_with_auto_battle(self) -> List[User]:
+        """获取所有开启了任一自动战斗的用户 (异步)"""
+        return await asyncio.to_thread(self._get_all_users_with_auto_battle_sync)
+
+    def _get_all_users_with_auto_battle_sync(self) -> List[User]:
+        """获取所有开启了任一自动战斗的用户的同步实现"""
         users = []
         with self._create_connection() as conn:
             conn.row_factory = sqlite3.Row
@@ -108,10 +114,40 @@ class SqliteUserRepository:
                 users.append(self._row_to_user(row))
         return users
 
-    def update_last_adventure_time(self, user_id: str):
+    def get_all_with_auto_adventure_enabled(self) -> List[User]:
+        """获取所有开启了自动冒险的用户"""
+        users = []
+        with self._create_connection() as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM users WHERE auto_adventure_enabled = 1")
+            rows = cursor.fetchall()
+            for row in rows:
+                user = self._row_to_user(row)
+                if user:
+                    users.append(user)
+        return users
+
+    async def update_last_adventure_time(self, user_id: str):
+        """Updates the user's last adventure time asynchronously."""
+        await asyncio.to_thread(self._update_last_adventure_time_sync, user_id)
+
+    def _update_last_adventure_time_sync(self, user_id: str):
+        """Synchronous implementation for updating the user's last adventure time."""
         with self._create_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("UPDATE users SET last_adventure_time = ? WHERE user_id = ?", (datetime.now().isoformat(), user_id))
+            conn.commit()
+
+    async def update_last_steal_time(self, user_id: str):
+        """更新用户最后的偷窃时间 (异步)"""
+        await asyncio.to_thread(self._update_last_steal_time_sync, user_id)
+
+    def _update_last_steal_time_sync(self, user_id: str):
+        """更新用户最后的偷窃时间的同步实现"""
+        with self._create_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("UPDATE users SET last_steal_time = ? WHERE user_id = ?", (datetime.now().isoformat(), user_id))
             conn.commit()
 
     def _row_to_user(self, row: sqlite3.Row) -> Optional[User]:

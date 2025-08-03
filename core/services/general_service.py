@@ -27,9 +27,6 @@ class GeneralService:
         
         # 招募冷却时间缓存
         self._recruit_cooldowns = {}
-        
-        # 闯关冷却时间缓存
-        self._adventure_cooldowns = {}
 
     def add_battle_log(self, user_id: str, log_type: str, log_details: str):
         """
@@ -256,93 +253,122 @@ class GeneralService:
             
         return settlement_block
 
-    def adventure(self, user_id: str, option_index: int = -1) -> Dict:
+    def adventure(self, user_id: str, option_index: int = -1, is_auto: bool = False) -> Dict:
         """
-        处理单次闯关的完整逻辑，包括开始、进行和结束。
-        - 如果用户在冒险中且提供了选项，则推进冒险。
-        - 如果用户在冒险中但未提供选项，则显示当前状态。
-        - 如果用户不在冒险中，则开始新的冒险（检查冷却和成本）。
+        处理单次闯关的完整逻辑。
+        - is_auto: True表示为自动闯关，遇到选择时会自动处理。
         """
         user = self.user_repo.get_by_id(user_id)
         if not user:
             return {"success": False, "message": "您尚未注册，请先使用 /三国注册 命令。"}
 
         adv_gen = AdventureGenerator(user_id, self.user_service)
-        current_state = self.user_service.get_user_adventure_state(user_id)
-
-        # 场景1: 玩家在冒险中
-        if current_state:
-            if option_index != -1:
-                result = adv_gen.advance_adventure(option_index)
-            else:
-                story_text = current_state.get("story_text", "你正面临一个抉择...")
-                options = current_state.get("options", [])
-                options_text = [f"{i+1}. {opt['text']}" for i, opt in enumerate(options)]
-                message = f"【冒险进行中】\n{story_text}\n\n请做出您的选择:\n" + "\n".join(options_text)
-                return {"success": True, "message": message, "requires_follow_up": True}
         
-        # 场景2: 玩家不在冒险中，开始新冒险
-        else:
-            cooldown_key = f"adventure_{user_id}"
-            current_time = datetime.now()
-            cooldown_seconds = self.config.get("adventure", {}).get("cooldown_seconds", 600)
-            if cooldown_key in self._adventure_cooldowns:
-                time_diff = (current_time - self._adventure_cooldowns[cooldown_key]).total_seconds()
-                if time_diff < cooldown_seconds:
-                    remaining_time = int(cooldown_seconds - time_diff)
-                    return {"success": False, "message": f"⚔️ 闯关冷却中，还需等待 {remaining_time} 秒。"}
-
+        # --- 自动闯关模式 ---
+        if is_auto:
+            # 检查成本
             cost = self.config.get("adventure", {}).get("cost_coins", 20)
             if user.coins < cost:
                 return {"success": False, "message": f"💰 铜钱不足！闯关需要 {cost} 铜钱，您只有 {user.coins}。"}
-            
-            # 扣费并开始
-            user.coins -= cost
-            self.user_repo.update(user)
-            
+
+            # 开始新冒险
             result = adv_gen.start_adventure()
+            if not (result and result.get("text")):
+                return {"success": False, "message": "❌ 冒险故事生成失败，请稍后再试。"}
             
-            if result and result.get("text"):
-                self._adventure_cooldowns[cooldown_key] = current_time
-            else: # 如果开始失败，回滚费用
-                user.coins += cost
-                self.user_repo.update(user)
-                return {"success": False, "message": "❌ 冒险故事生成失败，费用已退还，请稍后再试。"}
-
-        # --- 通用结果处理 ---
-        response_message = result["text"] # 用于最终返回给用户的完整消息
-        log_message = result["text"]      # 用于记录到数据库的纯事件消息
-
-        if not result["is_final"]:
-            options_text = [f"{i+1}. {opt}" for i, opt in enumerate(result["options"])]
-            response_message += "\n\n请做出您的选择:\n" + "\n".join(options_text)
-        else:
-            # 最终事件，进行结算
+            # 循环处理直到冒险结束
+            while not result.get("is_final"):
+                # 随机选择一个选项
+                options = result.get("options", [])
+                if not options:
+                    # 如果没有选项但不是最终事件，说明逻辑有误，中断以防死循环
+                    self.user_service.clear_user_adventure_state(user_id)
+                    return {"success": False, "message": "冒险中遇到意外情况，已中断。"}
+                
+                auto_choice = random.randint(0, len(options) - 1)
+                result = adv_gen.advance_adventure(auto_choice)
+                if not result:
+                    self.user_service.clear_user_adventure_state(user_id)
+                    return {"success": False, "message": "自动选择时出错，已中断。"}
+            
+            # 冒险结束，进入结算
+            response_message = result["text"]
+            log_message = result["text"]
+            
             rewards = result.get("rewards", {}).copy()
-            cost = self.config.get("adventure", {}).get("cost_coins", 20)
-
-            # 1. 应用奖励
-            reward_application_result = self.user_service.apply_adventure_rewards(user_id, rewards)
-
-            # 2. 构建结算信息块
-            settlement_block = self._generate_adventure_settlement(
-                cost=cost,
-                reward_result=reward_application_result
-            )
+            reward_application_result = self.user_service.apply_adventure_rewards(user_id, rewards, cost)
+            settlement_block = self._generate_adventure_settlement(cost=cost, reward_result=reward_application_result)
             
-            # 3. 组合最终返回给用户的消息
             response_message += settlement_block
 
-            # 4. 获取最新的用户状态并附加到返回消息中
             final_user = self.user_repo.get_by_id(user_id)
             if final_user:
                 response_message += f"\n\n【当前状态】\n铜钱: {final_user.coins} | 主公经验: {final_user.lord_exp} | 声望: {final_user.reputation}"
 
-            # 5. 清理本次冒险的状态
             self.user_service.clear_user_adventure_state(user_id)
-            
-            # 6. 记录纯粹的事件日志，不包含结算和状态
             self.add_battle_log(user_id=user_id, log_type="闯关", log_details=log_message)
+            
+            return {"success": True, "message": response_message, "requires_follow_up": False}
+
+        # --- 手动闯关模式 ---
+        current_state = self.user_service.active_adventures.get(user_id)
+        
+        # 场景1: 玩家在冒险中
+        if current_state:
+            if option_index != -1:
+                result = adv_gen.advance_adventure(option_index)
+                if not result:
+                    return {"success": False, "message": "处理您的选择时出错。"}
+            else: # 提示用户选择
+                story_text = current_state.get("story_text", "你正面临一个抉择...")
+                options = current_state.get("options", [])
+                options_text = [f"{i+1}. {opt['text']}" for i, opt in enumerate(options)]
+                message = f"【冒险进行中】\n{story_text}\n\n请做出您的选择:\n" + "\n".join(options_text) + f"\n\n使用 `/三国闯关 [选项编号]` 来决定您的行动。"
+                return {"success": True, "message": message, "requires_follow_up": True}
+        
+        # 场景2: 玩家不在冒险中，开始新冒险
+        else:
+            cooldown_seconds = self.config.get("adventure", {}).get("cooldown_seconds", 600)
+            if user.last_adventure_time and (datetime.now() - user.last_adventure_time).total_seconds() < cooldown_seconds:
+                remaining_time = int(cooldown_seconds - (datetime.now() - user.last_adventure_time).total_seconds())
+                return {"success": False, "message": f"⚔️ 闯关冷却中，还需等待 {remaining_time} 秒。"}
+
+            cost = self.config.get("adventure", {}).get("cost_coins", 20)
+            if user.coins < cost:
+                return {"success": False, "message": f"💰 铜钱不足！闯关需要 {cost} 铜钱，您只有 {user.coins}。"}
+
+            result = adv_gen.start_adventure()
+            if not (result and result.get("text")):
+                return {"success": False, "message": "❌ 冒险故事生成失败，请稍后再试。"}
+
+        # --- 手动模式结果处理 ---
+        if not result:
+             return {"success": False, "message": "❌ 冒险时发生未知错误。"}
+
+        response_message = result["text"]
+        log_message = result["text"]
+
+        if not result["is_final"]:
+            options = result.get("options", [])
+            options_text = [f"{i+1}. {opt['text']}" for i, opt in enumerate(options)]
+            response_message += "\n\n请做出您的选择:\n" + "\n".join(options_text) + f"\n\n使用 `/三国闯关 [选项编号]` 来决定您的行动。"
+        else:
+            # 最终事件，进行结算
+            rewards = result.get("rewards", {}).copy()
+            cost = self.config.get("adventure", {}).get("cost_coins", 20)
+            
+            reward_application_result = self.user_service.apply_adventure_rewards(user_id, rewards, cost)
+            settlement_block = self._generate_adventure_settlement(cost=cost, reward_result=reward_application_result)
+            
+            response_message += settlement_block
+
+            final_user = self.user_repo.get_by_id(user_id)
+            if final_user:
+                response_message += f"\n\n【当前状态】\n铜钱: {final_user.coins} | 主公经验: {final_user.lord_exp} | 声望: {final_user.reputation}"
+
+            self.user_service.clear_user_adventure_state(user_id)
+            self.add_battle_log(user_id=user_id, log_type="闯关", log_details=log_message)
+            self.user_repo.update_last_adventure_time(user_id)
 
         return {
             "success": True,

@@ -148,15 +148,15 @@ class UserService:
 
     # --- 冒险状态管理 ---
 
-    def get_user_adventure_state(self, user_id: str) -> dict | None:
+    async def get_user_adventure_state(self, user_id: str) -> dict | None:
         """获取用户的当前冒险状态"""
         return self.active_adventures.get(user_id)
 
-    def set_user_adventure_state(self, user_id: str, state: dict):
+    async def set_user_adventure_state(self, user_id: str, state: dict):
         """设置用户的冒险状态"""
         self.active_adventures[user_id] = state
 
-    def clear_user_adventure_state(self, user_id: str):
+    async def clear_user_adventure_state(self, user_id: str):
         """清除用户的冒险状态"""
         if user_id in self.active_adventures:
             del self.active_adventures[user_id]
@@ -218,11 +218,12 @@ class UserService:
             self.user_repo.update(user)
             return None
 
-    def apply_adventure_rewards(self, user_id: str, rewards: dict) -> dict:
+    def apply_adventure_rewards(self, user_id: str, rewards: dict, cost: int = 0) -> dict:
         """
-        将冒险奖励应用到用户身上, 并返回包含实际奖励和升级消息的字典
+        将冒险奖励和成本应用到用户身上, 并返回包含实际奖励和升级消息的字典
         :param user_id: 用户ID
         :param rewards: 奖励字典
+        :param cost: 成本
         :return: 一个包含实际奖励和升级消息的字典
         """
         user = self.get_user(user_id)
@@ -233,10 +234,15 @@ class UserService:
         level_up_message = None
         try:
             # 应用金钱、声望等
-            coins_change = rewards.get("coins", 0)
-            if coins_change != 0:
-                user.coins += coins_change
-                actual_rewards["coins"] = coins_change
+            coins_reward = rewards.get("coins", 0)
+            net_coins_change = coins_reward - cost
+            
+            if net_coins_change != 0:
+                user.coins += net_coins_change
+            
+            # 记录实际的奖励数额，而不是净变化
+            if coins_reward > 0:
+                actual_rewards["coins"] = coins_reward
 
             reputation_change = rewards.get("reputation", 0)
             if reputation_change != 0:
@@ -333,11 +339,21 @@ class UserService:
         else:
             return {"success": True, "message": "自动副本已关闭。"}
 
-    def get_all_users_with_auto_battle(self) -> List[User]:
-        return self.user_repo.get_all_users_with_auto_battle()
+    async def get_all_users_with_auto_battle(self) -> List[User]:
+        return await self.user_repo.get_all_users_with_auto_battle()
 
-    def update_last_adventure_time(self, user_id: str):
+    def get_users_with_auto_adventure_enabled(self) -> List[User]:
+        """获取所有开启了自动冒险的用户"""
+        return self.user_repo.get_all_with_auto_adventure_enabled()
+
+    async def update_last_adventure_time(self, user_id: str):
+        # This now calls the synchronous method in the repo, but should be awaited
+        # In a real async application, the repo method would be async
         self.user_repo.update_last_adventure_time(user_id)
+
+    async def update_last_steal_time(self, user_id: str):
+        """更新用户最后的偷窃时间"""
+        await self.user_repo.update_last_steal_time(user_id)
 
     def update_pity_counters(self, user_id: str, rarity: int):
         """

@@ -8,12 +8,14 @@
 import os
 import random
 import sqlite3
+import asyncio
 from datetime import datetime, timedelta
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from astrbot.api import logger, AstrBotConfig
 from astrbot.api.event import filter, AstrMessageEvent, MessageEventResult
 from astrbot.api.star import Context, Star
+from astrbot.core.message.components import At
 from astrbot.core.star.filter.permission import PermissionType
 
 from astrbot_plugin_sanguo_rpg.core.database.migration import run_migrations
@@ -100,10 +102,11 @@ class SanGuoRPGPlugin(Star):
         self.dungeon_service = DungeonService(self.dungeon_repo, self.user_repo, self.general_repo, self.user_service, self.general_service)
         self.shop_service = ShopService(self.shop_repo, self.user_repo, self.item_repo, self.inventory_repo)
         self.auto_battle_service = AutoBattleService(
-            self.user_service,
-            self.dungeon_service,
-            self.general_service,
-            self.game_config
+            user_service=self.user_service,
+            general_service=self.general_service,
+            dungeon_service=self.dungeon_service,
+            plugin=self,
+            game_config=self.game_config
         )
         self.steal_service = StealService(
             self.user_repo,
@@ -115,6 +118,9 @@ class SanGuoRPGPlugin(Star):
         
         data_setup_service = DataSetupService(self.general_repo, self.db_path)
         data_setup_service.setup_initial_data()
+
+        # 启动自动冒险任务
+        self.auto_battle_service.start()
         
         # 用于存储冷却时间的字典
         self._recruit_cooldowns = {}
@@ -171,17 +177,15 @@ class SanGuoRPGPlugin(Star):
 
 
     async def on_load(self):
-        """插件加载时执行，启动调度器"""
-        self.scheduler = AsyncIOScheduler(timezone="Asia/Shanghai")
-        self.scheduler.add_job(self.auto_battle_service.run_auto_battles, 'interval', minutes=30)
-        self.scheduler.start()
-        logger.info("自动战斗调度器已启动，每分钟检查一次。")
+        """插件加载时执行"""
+        logger.info("三国RPG插件 on_load 完成。")
+
 
     async def on_unload(self):
-        """插件卸载时执行，关闭调度器"""
-        if self.scheduler and self.scheduler.running:
-            self.scheduler.shutdown()
-            logger.info("自动战斗调度器已关闭。")
+        """插件卸载时执行"""
+        self.auto_battle_service.stop()
+        logger.info("自动冒险任务已停止。")
+
 
     async def initialize(self):
         """插件异步初始化"""
@@ -372,12 +376,8 @@ class SanGuoRPGPlugin(Star):
 
         # 将所有逻辑委托给 general_service
         result = self.general_service.adventure(user_id, option_index)
-        
+
         message = result["message"]
-        
-        # 如果需要后续操作，添加提示
-        if result.get("requires_follow_up"):
-            message += "\n\n使用 `/三国闯关 [选项编号]` 来决定您的行动。"
             
         yield event.plain_result(message.strip())
 
@@ -575,14 +575,24 @@ class SanGuoRPGPlugin(Star):
         thief_id = event.get_sender_id()
         
         # 检查是否有 at (mention)
-        mentioned_users = event.get_mentioned_user_ids()
-        if not mentioned_users:
+        message_obj = event.message_obj
+        target_id = None
+        if hasattr(message_obj, "message"):
+            # 检查消息中是否有At对象
+            for comp in message_obj.message:
+                if isinstance(comp, At):
+                    target_id = comp.qq
+                    break
+
+        if target_id is None:
             yield event.plain_result("请 @ 你要偷窃的目标。")
             return
-            
-        target_id = mentioned_users[0]
-        
-        result = self.steal_service.attempt_steal(thief_id, target_id)
+
+        if str(target_id) == str(thief_id):
+            yield event.plain_result("不能偷自己！")
+            return
+
+        result = await self.steal_service.attempt_steal(thief_id, target_id)
         yield event.plain_result(result["message"])
 
     @filter.permission_type(PermissionType.ADMIN)

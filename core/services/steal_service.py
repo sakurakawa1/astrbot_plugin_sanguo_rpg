@@ -26,9 +26,9 @@ class StealService:
         self.general_service = general_service
         self.game_config = game_config
 
-    def attempt_steal(self, thief_id: str, target_id: str) -> Dict[str, Any]:
+    async def attempt_steal(self, thief_id: str, target_id: str) -> Dict[str, Any]:
         """
-        尝试从目标处偷窃。
+        尝试从目标处偷窃 (异步)。
 
         Args:
             thief_id: 偷窃者的用户ID。
@@ -49,7 +49,7 @@ class StealService:
             return {"success": False, "message": "不能偷窃自己。"}
 
         # Cooldown check
-        cooldown_seconds = self.game_config.get("steal_cooldown", 300)  # 5 minutes
+        cooldown_seconds = self.game_config.get("steal", {}).get("cooldown_seconds", 300)
         if thief.last_steal_time:
             time_since_last_steal = datetime.now() - thief.last_steal_time
             if time_since_last_steal < timedelta(seconds=cooldown_seconds):
@@ -59,7 +59,7 @@ class StealService:
                     "message": f"偷窃技能冷却中，请等待 {int(remaining_time // 60)} 分钟 {int(remaining_time % 60)} 秒后再试。"
                 }
 
-        thief.last_steal_time = datetime.now()
+        await self.user_repo.update_last_steal_time(thief_id)
         result = {}
 
         # 1. 成功率判断 (50% 成功率)

@@ -54,7 +54,7 @@ class AdventureGenerator:
             template = template.replace(key, value)
         return template
 
-    def start_adventure(self):
+    async def start_adventure(self):
         """
         开始一个新的冒险。
         1. 随机选择一个开场 (OPENING)。
@@ -81,7 +81,7 @@ class AdventureGenerator:
         
         # 4. 保存玩家状态 (重要！)
         # 状态应包含当前事件ID，以便后续处理选项
-        self.user_service.set_user_adventure_state(self.user_id, {
+        await self.user_service.set_user_adventure_state(self.user_id, {
             "current_event_id": event["id"],
             "options": event["options"]
         })
@@ -92,7 +92,7 @@ class AdventureGenerator:
             "is_final": False
         }
 
-    def advance_adventure(self, choice_index):
+    async def advance_adventure(self, choice_index):
         """
         根据玩家的选择推进冒险。
         1. 获取玩家当前的冒险状态。
@@ -100,7 +100,7 @@ class AdventureGenerator:
         3. 在 RESOLUTIONS 中查找 next_stage 的定义。
         4. 处理结局或新的选择。
         """
-        state = self.user_service.get_user_adventure_state(self.user_id)
+        state = await self.user_service.get_user_adventure_state(self.user_id)
         if not state:
             return {"text": "你当前没有正在进行的冒险。", "options": [], "is_final": True}
 
@@ -116,7 +116,7 @@ class AdventureGenerator:
             return {"text": "故事线断了，出现了一个未定义的结局。", "options": [], "is_final": True}
 
         # 清除当前冒险状态，因为已经进入下一阶段
-        self.user_service.clear_user_adventure_state(self.user_id)
+        await self.user_service.clear_user_adventure_state(self.user_id)
 
         story_text = self._render_template(resolution["template"])
         
@@ -134,7 +134,7 @@ class AdventureGenerator:
             # 故事继续，有新的选择
             new_options = resolution["options"]
             # 将故事文本也存入状态，以便玩家随时查看
-            self.user_service.set_user_adventure_state(self.user_id, {
+            await self.user_service.set_user_adventure_state(self.user_id, {
                 "current_event_id": None, # 后续阶段没有事件ID
                 "options": new_options,
                 "story_text": story_text # 保存当前的故事文本
